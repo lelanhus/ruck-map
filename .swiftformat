@@ -1,0 +1,5 @@
+--indent 4
+--header "// Ruck Map iOS Application\n// Copyright © 2025"
+--disable redundantSelf
+--enable isEmpty
+--swiftversion 6.0
