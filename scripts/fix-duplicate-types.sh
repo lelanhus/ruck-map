@@ -1,3 +1,17 @@
+#!/bin/bash
+
+# This script removes duplicate type definitions from LocationTrackingManager.swift
+# and ensures types are only defined in their proper files
+
+echo "Fixing duplicate type definitions..."
+
+# Create a backup
+cp RuckMap/Core/Services/LocationTrackingManager.swift RuckMap/Core/Services/LocationTrackingManager.swift.backup
+
+# Remove the duplicate definitions from LocationTrackingManager.swift
+# We'll keep only the imports and the actual LocationTrackingManager class
+
+cat > RuckMap/Core/Services/LocationTrackingManager.swift << 'EOF'
 import Foundation
 import CoreLocation
 import CoreMotion
@@ -141,15 +155,6 @@ final class LocationTrackingManager: NSObject {
         locationManager.requestAlwaysAuthorization()
     }
     
-    func requestLocationPermission() {
-        locationManager.requestAlwaysAuthorization()
-    }
-    
-    private func shouldUpdateConfiguration() -> Bool {
-        // Check if enough time has passed since last configuration update
-        return true
-    }
-    
     func startTracking(with session: RuckSession) {
         guard trackingState == .stopped else { return }
         
@@ -216,10 +221,9 @@ final class LocationTrackingManager: NSObject {
         // Update session final data
         if let session = currentSession {
             session.endDate = Date()
-            session.totalDistance = totalDistance
             session.distance = totalDistance
             session.averagePace = averagePace
-            // isActive is computed property, don't need to set
+            session.isActive = false
             
             // Save context
             do {
@@ -240,8 +244,7 @@ final class LocationTrackingManager: NSObject {
         
         // Reset managers
         adaptiveGPSManager.resetMetrics()
-        // Reset motion location manager state
-        // motionLocationManager doesn't have resetMetrics, but state resets automatically
+        motionLocationManager.resetMetrics()
         elevationManager.reset()
     }
     
@@ -310,7 +313,7 @@ final class LocationTrackingManager: NSObject {
         guard location.horizontalAccuracy > 0 && location.horizontalAccuracy < 20 else { return }
         
         // Apply motion-based filtering
-        let filteredLocation = await motionLocationManager.processLocationUpdate(location)
+        guard let filteredLocation = motionLocationManager.processLocationUpdate(location) else { return }
         
         // Check minimum update interval
         if let lastLocation = recentLocations.last {
@@ -323,7 +326,7 @@ final class LocationTrackingManager: NSObject {
         
         // Apply adaptive GPS configuration if changed
         if let newConfig = adaptiveGPSManager.currentConfiguration as? GPSConfiguration,
-           shouldUpdateConfiguration() {
+           adaptiveGPSManager.shouldUpdateConfiguration {
             applyGPSConfiguration(newConfig)
         }
         
@@ -346,8 +349,7 @@ final class LocationTrackingManager: NSObject {
                 
                 // Update current session
                 if let session = currentSession {
-                    session.totalDistance = totalDistance
-            session.distance = totalDistance
+                    session.distance = totalDistance
                     session.currentLatitude = filteredLocation.coordinate.latitude
                     session.currentLongitude = filteredLocation.coordinate.longitude
                     
@@ -462,7 +464,7 @@ final class LocationTrackingManager: NSObject {
     }
     
     /// Check if location updates are being suppressed
-    var isLocationUpdatesSuppressed: Bool {
+    var isLocationSuppressed: Bool {
         motionLocationManager.suppressLocationUpdates
     }
     
@@ -502,7 +504,7 @@ final class LocationTrackingManager: NSObject {
         === Motion Tracking ===
         Activity: \(motionLocationManager.currentMotionActivity.rawValue)
         Confidence: \(String(format: "%.0f", motionConfidence * 100))%
-        Suppressing: \(isLocationUpdatesSuppressed)
+        Suppressing: \(isLocationSuppressed)
         Stationary: \(String(format: "%.0f", stationaryDuration))s
         
         === Elevation ===
@@ -534,3 +536,12 @@ extension LocationTrackingManager: CLLocationManagerDelegate {
         print("Location authorization changed: \(status.rawValue)")
     }
 }
+EOF
+
+echo "Fixed LocationTrackingManager.swift"
+
+# Regenerate Xcode project
+xcodegen generate
+
+echo "Regenerated Xcode project"
+echo "Done!"

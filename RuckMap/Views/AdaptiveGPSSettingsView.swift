@@ -3,7 +3,7 @@ import CoreLocation
 
 // MARK: - Adaptive GPS Settings View
 struct AdaptiveGPSSettingsView: View {
-    @ObservedObject var locationManager: LocationTrackingManager
+    @Bindable var locationManager: LocationTrackingManager
     @State private var showDebugInfo = false
     
     var body: some View {

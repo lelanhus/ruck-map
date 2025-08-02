@@ -98,12 +98,13 @@ struct BatteryStatus: Sendable {
     let isLowPowerModeEnabled: Bool
     
     var powerState: PowerState {
-        if isLowPowerModeEnabled || level <= PowerState.lowPowerMode.batteryThreshold {
-            return level <= PowerState.critical.batteryThreshold ? .critical : .lowPowerMode
+        if isLowPowerModeEnabled || level <= Float(PowerState.lowPowerMode.batteryThreshold) {
+            return level <= Float(PowerState.critical.batteryThreshold) ? .critical : .lowPowerMode
         }
         return .normal
     }
     
+    @MainActor
     static var current: BatteryStatus {
         let device = UIDevice.current
         device.isBatteryMonitoringEnabled = true
@@ -155,7 +156,13 @@ final class AdaptiveGPSManager: NSObject {
     }
     
     deinit {
-        cleanupBatteryMonitoring()
+        // Clean up observers synchronously
+        if let batteryObserver = batteryObserver {
+            NotificationCenter.default.removeObserver(batteryObserver)
+        }
+        if let lowPowerModeObserver = lowPowerModeObserver {
+            NotificationCenter.default.removeObserver(lowPowerModeObserver)
+        }
     }
     
     // MARK: - Public Methods

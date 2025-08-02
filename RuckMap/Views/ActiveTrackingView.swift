@@ -98,7 +98,7 @@ struct ActiveTrackingView: View {
     }
     
     private var motionActivityColor: Color {
-        let confidence = locationManager.getMotionConfidence()
+        let confidence = locationManager.motionConfidence
         switch locationManager.getMotionActivity() {
         case .stationary:
             return confidence > 0.7 ? .gray : .secondary
@@ -335,12 +335,9 @@ struct ActiveTrackingView: View {
         .task {
             // Update elevation metrics periodically
             while !Task.isCancelled {
-                let (gain, loss) = await locationManager.getCumulativeElevation()
-                let instantaneousGrade = await locationManager.getCurrentGrade()
-                
-                totalElevationGain = gain
-                totalElevationLoss = loss
-                currentGrade = instantaneousGrade
+                totalElevationGain = locationManager.elevationManager.elevationGain
+                totalElevationLoss = locationManager.elevationManager.elevationLoss
+                currentGrade = locationManager.elevationManager.currentGrade
                 
                 try? await Task.sleep(for: .seconds(2))
             }

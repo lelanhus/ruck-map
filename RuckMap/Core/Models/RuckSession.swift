@@ -28,6 +28,14 @@ final class RuckSession {
     var syncStatus: String // For offline sync management
     var version: Int // For conflict resolution
     
+    // Real-time tracking properties
+    var distance: Double = 0 // alias for totalDistance
+    var currentLatitude: Double?
+    var currentLongitude: Double?
+    var currentElevation: Double = 0
+    var currentGrade: Double = 0
+    var currentPace: Double = 0
+    
     @Relationship(deleteRule: .cascade)
     var locationPoints: [LocationPoint]
     

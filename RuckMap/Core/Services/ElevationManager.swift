@@ -17,37 +17,7 @@ import Observation
 final class ElevationManager {
     
     // MARK: - Types
-    
-    enum ElevationConfiguration: String, CaseIterable, Sendable {
-        case precise = "Precise (±1m)"
-        case balanced = "Balanced (±3m)"
-        case batterySaver = "Battery Saver (±5m)"
-        
-        var updateInterval: TimeInterval {
-            switch self {
-            case .precise: return 1.0
-            case .balanced: return 2.0
-            case .batterySaver: return 5.0
-            }
-        }
-        
-        var minElevationChange: Double {
-            switch self {
-            case .precise: return 0.5
-            case .balanced: return 1.0
-            case .batterySaver: return 2.0
-            }
-        }
-    }
-    
-    struct ElevationData: Sendable {
-        let fusedElevation: Double
-        let gpsElevation: Double
-        let barometricRelativeAltitude: Double?
-        let confidence: Double // 0-1
-        let timestamp: Date
-        let grade: Double?
-    }
+    // ElevationConfiguration and ElevationData are now defined in ElevationTypes.swift
     
     // MARK: - Properties
     

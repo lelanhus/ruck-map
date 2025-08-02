@@ -26,17 +26,15 @@ struct ElevationProfileView: View {
             // Calculate distance from previous point
             if i > 0 {
                 let prevPoint = locationPoints[i - 1]
-                if let distance = point.distance(from: prevPoint) {
-                    cumulativeDistance += distance
-                }
+                let distance = point.distance(to: prevPoint)
+                cumulativeDistance += distance
             }
             
             // Calculate grade if we have a next point
             var grade: Double? = nil
             if i < locationPoints.count - 1 {
-                if let nextGrade = point.grade(to: locationPoints[i + 1], overDistance: 10) {
-                    grade = nextGrade
-                }
+                // Use stored grade if available
+                grade = point.instantaneousGrade
             }
             
             data.append((distance: cumulativeDistance, elevation: elevation, grade: grade))
@@ -61,8 +59,8 @@ struct ElevationProfileView: View {
                         .foregroundColor(.red)
                         .font(.caption)
                     
-                    if let accuracy = session.elevationAccuracy, accuracy > 0 {
-                        Label("±\(Int(accuracy))m", systemImage: "location.fill")
+                    if session.elevationAccuracy > 0 {
+                        Label("±\(Int(session.elevationAccuracy))m", systemImage: "location.fill")
                             .foregroundColor(.secondary)
                             .font(.caption)
                     }
@@ -96,9 +94,7 @@ struct ElevationProfileView: View {
                 .frame(height: 200)
                 .chartYAxisLabel("Elevation (m)", position: .leading)
                 .chartXAxisLabel("Distance (km)", position: .bottom)
-                .chartYScale(domain: [
-                    (session.minElevation - 10)...(session.maxElevation + 10)
-                ])
+                .chartYScale(domain: (session.minElevation - 10)...(session.maxElevation + 10))
             } else {
                 // Empty state
                 RoundedRectangle(cornerRadius: 12)
@@ -160,12 +156,12 @@ struct ElevationProfileView: View {
 
 // MARK: - Preview
 #Preview {
-    ElevationProfileView(
+    let session = RuckSession()
+    session.loadWeight = 20
+    
+    return ElevationProfileView(
         locationPoints: [],
-        session: RuckSession(
-            loadWeight: 20,
-            terrainType: .mixed
-        )
+        session: session
     )
     .padding()
 }

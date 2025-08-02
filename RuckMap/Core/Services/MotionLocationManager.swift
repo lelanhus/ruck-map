@@ -46,11 +46,24 @@ enum MotionActivityType: String, CaseIterable, Sendable {
     }
 }
 
+// MARK: - Attitude Data
+struct AttitudeData: Sendable {
+    let roll: Double
+    let pitch: Double
+    let yaw: Double
+    
+    init(from attitude: CMAttitude) {
+        self.roll = attitude.roll
+        self.pitch = attitude.pitch
+        self.yaw = attitude.yaw
+    }
+}
+
 // MARK: - Motion Data
 struct MotionData: Sendable {
     let acceleration: CMAcceleration
     let rotationRate: CMRotationRate
-    let attitude: CMAttitude?
+    let attitude: AttitudeData?
     let timestamp: Date
     let motionActivity: MotionActivityType
     let confidence: Double // 0.0 to 1.0
@@ -351,7 +364,9 @@ final class MotionLocationManager: NSObject {
     }
     
     deinit {
-        stopMotionTracking()
+        // Stop motion updates synchronously
+        motionManager.stopDeviceMotionUpdates()
+        motionActivityManager.stopActivityUpdates()
     }
     
     // MARK: - Setup Methods
@@ -491,7 +506,7 @@ final class MotionLocationManager: NSObject {
         let motionData = MotionData(
             acceleration: motion.userAcceleration,
             rotationRate: motion.rotationRate,
-            attitude: motion.attitude,
+            attitude: AttitudeData(from: motion.attitude),
             timestamp: Date(),
             motionActivity: currentMotionActivity,
             confidence: motionConfidence
@@ -540,7 +555,7 @@ final class MotionLocationManager: NSObject {
     
     private func processPedometerData(_ data: CMPedometerData) {
         // Additional validation for walking/running detection
-        if let steps = data.numberOfSteps, steps.intValue > 0 {
+        if data.numberOfSteps.intValue > 0 {
             // Enhance walking/running detection
             if currentMotionActivity == .unknown || currentMotionActivity == .stationary {
                 currentMotionActivity = .walking
