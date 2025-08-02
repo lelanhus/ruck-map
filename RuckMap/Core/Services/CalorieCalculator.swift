@@ -76,24 +76,24 @@ struct CalorieCalculationParameters: Sendable {
     
     /// Speed in mph for LCDA formula
     var speedMph: Double {
-        speed * 2.237 // m/s to mph conversion
+        speed / LCDAConstants.mphToMeterPerSecond // Convert m/s to mph
     }
     
     /// Validates that parameters are within acceptable ranges
     func validate() throws {
-        guard bodyWeight > 30 && bodyWeight < 200 else {
+        guard bodyWeight > LCDAConstants.minBodyWeight && bodyWeight < LCDAConstants.maxBodyWeight else {
             throw CalorieCalculationError.invalidBodyWeight(bodyWeight)
         }
         
-        guard loadWeight >= 0 && loadWeight <= 100 else {
+        guard loadWeight >= LCDAConstants.minLoadWeight && loadWeight <= LCDAConstants.maxLoadWeight else {
             throw CalorieCalculationError.invalidLoadWeight(loadWeight)
         }
         
-        guard speed >= 0 && speed <= 3.0 else { // ~6.7 mph max
+        guard speed >= LCDAConstants.minSpeed && speed <= LCDAConstants.maxSpeed else {
             throw CalorieCalculationError.invalidSpeed(speed)
         }
         
-        guard grade >= -25 && grade <= 30 else {
+        guard grade >= LCDAConstants.minGradeValidation && grade <= LCDAConstants.maxGradeValidation else {
             throw CalorieCalculationError.invalidGrade(grade)
         }
     }
@@ -123,7 +123,7 @@ struct CalorieCalculationResult: Sendable {
     
     /// Confidence range as percentage
     var confidenceRangePercent: Double {
-        ((upperBound - lowerBound) / metabolicRate) * 100
+        ((upperBound - lowerBound) / metabolicRate) * LCDAConstants.percentageMultiplier
     }
 }
 
@@ -139,13 +139,13 @@ enum CalorieCalculationError: LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case .invalidBodyWeight(let weight):
-            return "Invalid body weight: \(weight) kg. Must be between 30-200 kg."
+            return "Invalid body weight: \(weight) kg. Must be between \(Int(LCDAConstants.minBodyWeight))-\(Int(LCDAConstants.maxBodyWeight)) kg."
         case .invalidLoadWeight(let weight):
-            return "Invalid load weight: \(weight) kg. Must be between 0-100 kg."
+            return "Invalid load weight: \(weight) kg. Must be between \(Int(LCDAConstants.minLoadWeight))-\(Int(LCDAConstants.maxLoadWeight)) kg."
         case .invalidSpeed(let speed):
-            return "Invalid speed: \(speed) m/s. Must be between 0-3.0 m/s."
+            return "Invalid speed: \(speed) m/s. Must be between \(LCDAConstants.minSpeed)-\(LCDAConstants.maxSpeed) m/s."
         case .invalidGrade(let grade):
-            return "Invalid grade: \(grade)%. Must be between -25% to +30%."
+            return "Invalid grade: \(grade)%. Must be between \(Int(LCDAConstants.minGradeValidation))% to +\(Int(LCDAConstants.maxGradeValidation))%."
         case .calculationOverflow:
             return "Calculation resulted in overflow."
         case .insufficientData:
@@ -168,18 +168,104 @@ final class CalorieCalculator: ObservableObject {
     
     // MARK: - Private Properties
     private var calculationHistory: [CalorieCalculationResult] = []
-    private let maxHistorySize: Int = 1000
     private var lastCalculationTime: Date?
     private var calculationTask: Task<Void, Never>?
     
     // MARK: - LCDA Algorithm Constants
-    private struct LCDAConstants {
+    struct LCDAConstants {
         static let baseCoefficient: Double = 1.44
         static let linearCoefficient: Double = 1.94
         static let quadraticCoefficient: Double = 0.24
         static let minSpeedMph: Double = 0.5
         static let maxSpeedMph: Double = 6.0
         static let confidenceInterval: Double = 0.10 // ±10%
+        
+        // Conversion factors
+        static let wattsToKcalPerMin: Double = 0.014340  // 1 watt = 0.014340 kcal/min
+        static let mphToMeterPerSecond: Double = 0.44704  // 1 mph = 0.44704 m/s
+        
+        // Grade range limits
+        static let minGrade: Double = -20.0  // Maximum downhill grade
+        static let maxGrade: Double = 20.0   // Maximum uphill grade
+        
+        // Altitude effects
+        static let altitudeReductionPerKm: Double = 0.10  // 10% VO2max reduction per 1000m
+        static let altitudeThreshold: Double = 1500.0     // Altitude effects start at 1500m
+        
+        // Temperature thresholds (Celsius)
+        static let coldThreshold: Double = -5.0
+        static let coolThreshold: Double = 5.0
+        static let warmThreshold: Double = 25.0
+        static let hotThreshold: Double = 30.0
+        
+        // Wind resistance
+        static let windResistanceBase: Double = 0.002  // Base wind resistance coefficient
+        
+        // Wind speed thresholds (m/s)
+        static let windSpeedLight: Double = 5.0
+        static let windSpeedModerate: Double = 10.0
+        static let windSpeedStrong: Double = 15.0
+        
+        // Wind resistance multipliers
+        static let windFactorNone: Double = 1.0
+        static let windFactorLight: Double = 1.05
+        static let windFactorModerate: Double = 1.1
+        static let windFactorStrong: Double = 1.2
+        
+        // Temperature adjustment factors
+        static let tempFactorNormal: Double = 1.0
+        static let tempFactorMild: Double = 1.05
+        static let tempFactorExtreme: Double = 1.15
+        
+        // Grade adjustment factors
+        static let gradeFactorDefault: Double = 1.0
+        
+        // Body weight limits (kg)
+        static let minBodyWeight: Double = 30.0
+        static let maxBodyWeight: Double = 200.0
+        
+        // Load weight limits (kg)
+        static let minLoadWeight: Double = 0.0
+        static let maxLoadWeight: Double = 100.0
+        
+        // Speed limits (m/s)
+        static let minSpeed: Double = 0.0
+        static let maxSpeed: Double = 3.0  // ~6.7 mph
+        
+        // Grade limits (percentage)
+        static let minGradeValidation: Double = -25.0
+        static let maxGradeValidation: Double = 30.0
+        
+        // Time conversion
+        static let secondsPerMinute: Double = 60.0
+        
+        // Default environment values
+        static let defaultTemperature: Double = 20.0
+        static let defaultWindSpeed: Double = 0.0
+        static let defaultHumidity: Double = 50.0
+        
+        // Altitude conversion
+        static let metersPerKilometer: Double = 1000.0
+        
+        // Update intervals
+        static let updateIntervalSeconds: TimeInterval = 1.0
+        
+        // Confidence calculations
+        static let percentageMultiplier: Double = 100.0
+        
+        // Test parameters for validation
+        static let testBodyWeight: Double = 70.0
+        static let testLoadWeight: Double = 15.0
+        static let testSpeed: Double = 1.34  // 3 mph
+        static let testGrade: Double = 0.0
+        static let testExpectedMinRate: Double = 4.0
+        static let testExpectedMaxRate: Double = 6.0
+        static let testGradeValue: Double = 10.0
+        static let testGradeExpected: Double = 1.45
+        static let testGradeTolerance: Double = 0.01
+        
+        // History management
+        static let maxHistorySize: Int = 1000  // Maximum calculation history entries
     }
     
     // MARK: - Grade Adjustment Lookup Table
@@ -195,9 +281,13 @@ final class CalorieCalculator: ObservableObject {
         20.0: 2.10    // Steep uphill
     ]
     
+    // Pre-sorted grade keys for efficient interpolation
+    private let sortedGradeKeys: [Double]
+    
     // MARK: - Initialization
     init() {
-        // Initialize with default values
+        // Pre-sort grade keys once during initialization for performance
+        self.sortedGradeKeys = gradeAdjustments.keys.sorted()
     }
     
     deinit {
@@ -285,7 +375,7 @@ final class CalorieCalculator: ObservableObject {
     
     /// Gets average metabolic rate over recent period
     func getAverageMetabolicRate(overLastMinutes minutes: Double = 5.0) -> Double {
-        let cutoffTime = Date().addingTimeInterval(-minutes * 60)
+        let cutoffTime = Date().addingTimeInterval(-minutes * LCDAConstants.secondsPerMinute)
         let recentResults = calculationHistory.filter { $0.timestamp >= cutoffTime }
         
         guard !recentResults.isEmpty else { return 0.0 }
@@ -297,7 +387,7 @@ final class CalorieCalculator: ObservableObject {
     // MARK: - Private Implementation
     
     /// Implements the core LCDA walking equation: E = (1.44 + 1.94S + 0.24S²) × BW
-    private func calculateLCDABaseRate(_ parameters: CalorieCalculationParameters) throws -> Double {
+    func calculateLCDABaseRate(_ parameters: CalorieCalculationParameters) throws -> Double {
         let speedMph = parameters.speedMph
         
         // Clamp speed to valid LCDA range (0.5-6.0 mph)
@@ -310,8 +400,8 @@ final class CalorieCalculator: ObservableObject {
         
         let metabolicRate = energyCoefficient * parameters.totalWeight
         
-        // Convert from watts to kcal/min (1 watt = 0.014340 kcal/min)
-        let kcalPerMin = metabolicRate * 0.014340
+        // Convert from watts to kcal/min
+        let kcalPerMin = metabolicRate * LCDAConstants.wattsToKcalPerMin
         
         // Validate result
         guard kcalPerMin.isFinite && kcalPerMin > 0 else {
@@ -324,32 +414,31 @@ final class CalorieCalculator: ObservableObject {
     /// Calculates grade adjustment factor using military load carriage research
     private func calculateGradeAdjustment(_ grade: Double) -> Double {
         // Clamp grade to supported range
-        let clampedGrade = max(-20.0, min(20.0, grade))
-        
-        // Find surrounding grade points for interpolation
-        let sortedGrades = gradeAdjustments.keys.sorted()
+        let clampedGrade = max(LCDAConstants.minGrade, min(LCDAConstants.maxGrade, grade))
         
         // If exact match exists, return it
         if let exactFactor = gradeAdjustments[clampedGrade] {
             return exactFactor
         }
         
-        // Find interpolation bounds
-        var lowerGrade: Double = -20.0
-        var upperGrade: Double = 20.0
+        // Find interpolation bounds using binary search on pre-sorted array
+        var lowerGrade: Double = LCDAConstants.minGrade
+        var upperGrade: Double = LCDAConstants.maxGrade
         
-        for gradePoint in sortedGrades {
-            if gradePoint <= clampedGrade {
-                lowerGrade = gradePoint
-            }
-            if gradePoint >= clampedGrade && upperGrade == 20.0 {
-                upperGrade = gradePoint
-            }
+        // Binary search for the lower bound
+        let lowerIndex = sortedGradeKeys.lastIndex(where: { $0 <= clampedGrade }) ?? 0
+        lowerGrade = sortedGradeKeys[lowerIndex]
+        
+        // Find the upper bound
+        if lowerIndex < sortedGradeKeys.count - 1 {
+            upperGrade = sortedGradeKeys[lowerIndex + 1]
+        } else {
+            upperGrade = sortedGradeKeys[lowerIndex]
         }
         
         // Perform linear interpolation
-        let lowerFactor = gradeAdjustments[lowerGrade] ?? 1.0
-        let upperFactor = gradeAdjustments[upperGrade] ?? 1.0
+        let lowerFactor = gradeAdjustments[lowerGrade] ?? LCDAConstants.gradeFactorDefault
+        let upperFactor = gradeAdjustments[upperGrade] ?? LCDAConstants.gradeFactorDefault
         
         if upperGrade == lowerGrade {
             return lowerFactor
@@ -363,31 +452,31 @@ final class CalorieCalculator: ObservableObject {
     private func calculateEnvironmentalFactor(temperature: Double, altitude: Double, windSpeed: Double) -> Double {
         // Temperature factor (0.95-1.15 range)
         let temperatureFactor: Double
-        if temperature < -5 {
-            temperatureFactor = 1.15
-        } else if temperature < 5 {
-            temperatureFactor = 1.05
-        } else if temperature > 30 {
-            temperatureFactor = 1.15
-        } else if temperature > 25 {
-            temperatureFactor = 1.05
+        if temperature < LCDAConstants.coldThreshold {
+            temperatureFactor = LCDAConstants.tempFactorExtreme
+        } else if temperature < LCDAConstants.coolThreshold {
+            temperatureFactor = LCDAConstants.tempFactorMild
+        } else if temperature > LCDAConstants.hotThreshold {
+            temperatureFactor = LCDAConstants.tempFactorExtreme
+        } else if temperature > LCDAConstants.warmThreshold {
+            temperatureFactor = LCDAConstants.tempFactorMild
         } else {
-            temperatureFactor = 1.0
+            temperatureFactor = LCDAConstants.tempFactorNormal
         }
         
         // Altitude factor (10% VO2max reduction per 1000m above sea level)
-        let altitudeFactor = 1.0 + max(0, altitude / 1000.0) * 0.10
+        let altitudeFactor = 1.0 + max(0, altitude / LCDAConstants.metersPerKilometer) * LCDAConstants.altitudeReductionPerKm
         
         // Wind resistance factor (0.9-1.2 multiplier)
         let windFactor: Double
-        if windSpeed > 15 { // Strong headwind
-            windFactor = 1.2
-        } else if windSpeed > 10 {
-            windFactor = 1.1
-        } else if windSpeed > 5 {
-            windFactor = 1.05
+        if windSpeed > LCDAConstants.windSpeedStrong { // Strong headwind
+            windFactor = LCDAConstants.windFactorStrong
+        } else if windSpeed > LCDAConstants.windSpeedModerate {
+            windFactor = LCDAConstants.windFactorModerate
+        } else if windSpeed > LCDAConstants.windSpeedLight {
+            windFactor = LCDAConstants.windFactorLight
         } else {
-            windFactor = 1.0
+            windFactor = LCDAConstants.windFactorNone
         }
         
         return temperatureFactor * altitudeFactor * windFactor
@@ -400,7 +489,7 @@ final class CalorieCalculator: ObservableObject {
         }
         
         let timeDeltaSeconds = timestamp.timeIntervalSince(lastTime)
-        return max(0, timeDeltaSeconds / 60.0) // Convert to minutes
+        return max(0, timeDeltaSeconds / LCDAConstants.secondsPerMinute) // Convert to minutes
     }
     
     /// Adds result to calculation history with size management
@@ -408,8 +497,8 @@ final class CalorieCalculator: ObservableObject {
         calculationHistory.append(result)
         
         // Maintain history size limit
-        if calculationHistory.count > maxHistorySize {
-            calculationHistory.removeFirst(calculationHistory.count - maxHistorySize)
+        if calculationHistory.count > LCDAConstants.maxHistorySize {
+            calculationHistory.removeFirst(calculationHistory.count - LCDAConstants.maxHistorySize)
         }
     }
 }
@@ -438,14 +527,14 @@ extension CalorieCalculator {
                           let grade = grade,
                           let terrain = terrain else {
                         // Wait and retry if data not available
-                        try await Task.sleep(for: .seconds(1))
+                        try await Task.sleep(for: .seconds(LCDAConstants.updateIntervalSeconds))
                         continue
                     }
                     
                     // Create calculation parameters
                     let terrainMultiplier = TerrainDifficultyMultiplier(from: terrain).rawValue
-                    let temperature = weather?.temperature ?? 20.0
-                    let windSpeed = weather?.windSpeed ?? 0.0
+                    let temperature = weather?.temperature ?? LCDAConstants.defaultTemperature
+                    let windSpeed = weather?.windSpeed ?? LCDAConstants.defaultWindSpeed
                     
                     let parameters = CalorieCalculationParameters(
                         bodyWeight: bodyWeight,
@@ -462,13 +551,13 @@ extension CalorieCalculator {
                     // Calculate calories
                     _ = try await calculateCalories(with: parameters)
                     
-                    // Update every 1 second as specified
-                    try await Task.sleep(for: .seconds(1))
+                    // Update every second as specified
+                    try await Task.sleep(for: .seconds(LCDAConstants.updateIntervalSeconds))
                     
                 } catch {
                     print("Calorie calculation error: \(error)")
                     // Continue calculation despite errors
-                    try? await Task.sleep(for: .seconds(1))
+                    try? await Task.sleep(for: .seconds(LCDAConstants.updateIntervalSeconds))
                 }
             }
         }
@@ -488,22 +577,22 @@ extension CalorieCalculator {
     func validateAgainstResearchData() -> [String] {
         var validationResults: [String] = []
         
-        // Test case 1: 70kg person, 15kg load, 1.34 m/s (3 mph), level terrain
+        // Test case 1: Standard military research validation parameters
         do {
             let testParams = CalorieCalculationParameters(
-                bodyWeight: 70.0,
-                loadWeight: 15.0,
-                speed: 1.34, // 3 mph
-                grade: 0.0,
-                temperature: 20.0,
+                bodyWeight: LCDAConstants.testBodyWeight,
+                loadWeight: LCDAConstants.testLoadWeight,
+                speed: LCDAConstants.testSpeed, // 3 mph
+                grade: LCDAConstants.testGrade,
+                temperature: LCDAConstants.defaultTemperature,
                 altitude: 0.0,
-                windSpeed: 0.0,
-                terrainMultiplier: 1.0,
+                windSpeed: LCDAConstants.defaultWindSpeed,
+                terrainMultiplier: LCDAConstants.gradeFactorDefault,
                 timestamp: Date()
             )
             
             let result = try calculateLCDABaseRate(testParams)
-            let expectedRange = 4.0...6.0 // Expected kcal/min range from research
+            let expectedRange = LCDAConstants.testExpectedMinRate...LCDAConstants.testExpectedMaxRate // Expected kcal/min range from research
             
             if expectedRange.contains(result) {
                 validationResults.append("✓ Test case 1 passed: \(String(format: "%.2f", result)) kcal/min")
@@ -515,11 +604,11 @@ extension CalorieCalculator {
         }
         
         // Test case 2: Grade adjustment validation
-        let gradeTest = calculateGradeAdjustment(10.0)
-        if abs(gradeTest - 1.45) < 0.01 {
+        let gradeTest = calculateGradeAdjustment(LCDAConstants.testGradeValue)
+        if abs(gradeTest - LCDAConstants.testGradeExpected) < LCDAConstants.testGradeTolerance {
             validationResults.append("✓ Grade adjustment test passed: \(gradeTest)")
         } else {
-            validationResults.append("✗ Grade adjustment test failed: \(gradeTest) (expected 1.45)")
+            validationResults.append("✗ Grade adjustment test failed: \(gradeTest) (expected \(LCDAConstants.testGradeExpected))")
         }
         
         return validationResults
