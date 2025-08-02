@@ -44,7 +44,7 @@ class DataCoordinator: ObservableObject {
         
         do {
             self.modelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])
-            self.sessionManager = SessionManager(modelContainer: modelContainer)
+            self.sessionManager = SessionManager(container: modelContainer)
             self.migrationManager = MigrationManager()
             self.exportManager = ExportManager()
             self.trackCompressor = TrackCompressor()
@@ -325,8 +325,8 @@ extension DataCoordinator {
     }
     
     /// Creates an active tracking view
-    func makeActiveTrackingView() -> some View {
-        ActiveTrackingView()
+    func makeActiveTrackingView(locationManager: LocationTrackingManager) -> some View {
+        ActiveTrackingView(locationManager: locationManager)
             .environmentObject(self)
             .modelContainer(modelContainer)
     }

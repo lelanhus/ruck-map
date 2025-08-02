@@ -10,9 +10,9 @@ actor SessionManager {
     private var autoSaveTask: Task<Void, Never>?
     private var backgroundTask: Task<Void, Never>?
     
-    init(modelContainer: ModelContainer) {
-        let modelContext = ModelContext(modelContainer)
-        self.modelExecutor = DefaultModelExecutor(modelContext: modelContext)
+    init(container: ModelContainer) {
+        let context = ModelContext(container)
+        self.init(modelContext: context)
         
         Task {
             await startBackgroundTasks()

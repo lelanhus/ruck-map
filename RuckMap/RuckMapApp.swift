@@ -3,15 +3,13 @@ import SwiftData
 
 @main
 struct RuckMapApp: App {
-    @StateObject private var dataCoordinator: DataCoordinator
-    
-    init() {
+    @StateObject private var dataCoordinator: DataCoordinator = {
         do {
-            _dataCoordinator = StateObject(wrappedValue: try DataCoordinator())
+            return try DataCoordinator()
         } catch {
             fatalError("Failed to initialize DataCoordinator: \(error)")
         }
-    }
+    }()
 
     var body: some Scene {
         WindowGroup {
