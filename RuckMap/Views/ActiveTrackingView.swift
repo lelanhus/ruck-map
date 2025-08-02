@@ -6,6 +6,9 @@ struct ActiveTrackingView: View {
     @State var locationManager: LocationTrackingManager
     @Environment(\.modelContext) private var modelContext
     @State private var showEndConfirmation = false
+    @State private var currentGrade: Double = 0.0
+    @State private var totalElevationGain: Double = 0.0
+    @State private var totalElevationLoss: Double = 0.0
     
     private var formattedDistance: String {
         let miles = locationManager.totalDistance / 1609.34
@@ -30,6 +33,36 @@ struct ActiveTrackingView: View {
             return String(format: "%d:%02d:%02d", hours, minutes, seconds)
         } else {
             return String(format: "%d:%02d", minutes, seconds)
+        }
+    }
+    
+    private var formattedGrade: String {
+        let absGrade = abs(currentGrade)
+        let sign = currentGrade >= 0 ? "+" : "-"
+        return String(format: "%@%.1f%%", sign, absGrade)
+    }
+    
+    private var formattedElevationGain: String {
+        let feet = totalElevationGain * 3.28084
+        return String(format: "%.0f ft", feet)
+    }
+    
+    private var formattedElevationLoss: String {
+        let feet = totalElevationLoss * 3.28084
+        return String(format: "%.0f ft", feet)
+    }
+    
+    private var gradeColor: Color {
+        let absGrade = abs(currentGrade)
+        switch absGrade {
+        case 0..<3:
+            return .green
+        case 3..<8:
+            return .orange
+        case 8..<15:
+            return .red
+        default:
+            return .purple
         }
     }
     
@@ -225,6 +258,31 @@ struct ActiveTrackingView: View {
                             color: .purple
                         )
                     }
+                    
+                    // Current grade card
+                    MetricCard(
+                        title: "GRADE",
+                        value: formattedGrade,
+                        icon: currentGrade >= 0 ? "arrow.up.right" : "arrow.down.right",
+                        color: gradeColor
+                    )
+                    
+                    // Elevation metrics row
+                    HStack(spacing: 12) {
+                        ElevationMetricCard(
+                            title: "GAIN",
+                            value: formattedElevationGain,
+                            icon: "arrow.up",
+                            color: .green
+                        )
+                        
+                        ElevationMetricCard(
+                            title: "LOSS",
+                            value: formattedElevationLoss,
+                            icon: "arrow.down",
+                            color: .red
+                        )
+                    }
                 }
                 .padding()
             }
@@ -274,6 +332,19 @@ struct ActiveTrackingView: View {
         } message: {
             Text("Are you sure you want to end this ruck session?")
         }
+        .task {
+            // Update elevation metrics periodically
+            while !Task.isCancelled {
+                let (gain, loss) = await locationManager.getCumulativeElevation()
+                let instantaneousGrade = await locationManager.getCurrentGrade()
+                
+                totalElevationGain = gain
+                totalElevationLoss = loss
+                currentGrade = instantaneousGrade
+                
+                try? await Task.sleep(for: .seconds(2))
+            }
+        }
     }
 }
 
@@ -305,6 +376,37 @@ struct MetricCard: View {
         .background(Color(.systemBackground))
         .cornerRadius(15)
         .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+    }
+}
+
+struct ElevationMetricCard: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.title3)
+                    .foregroundColor(color)
+                Spacer()
+                Text(title)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.secondary)
+            }
+            
+            Text(value)
+                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .foregroundColor(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 3, x: 0, y: 1)
     }
 }
 

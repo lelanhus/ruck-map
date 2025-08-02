@@ -192,9 +192,11 @@ final class LocationTrackingManager: NSObject {
     // Motion-based location optimization
     private(set) var motionLocationManager: MotionLocationManager
     
+    // Elevation tracking
+    private(set) var elevationManager: ElevationManager
+    
     // MARK: - Private Properties
     private let locationManager = CLLocationManager()
-    private let altimeter = CMAltimeter()
     private var locations: [CLLocation] = []
     private var lastDistanceCalculation: CLLocation?
     private var paceBuffer: [Double] = [] // For rolling average
@@ -215,10 +217,12 @@ final class LocationTrackingManager: NSObject {
         // Initialize dependencies
         self.adaptiveGPSManager = AdaptiveGPSManager()
         self.motionLocationManager = MotionLocationManager()
+        self.elevationManager = ElevationManager()
         
         super.init()
         setupLocationManager()
         setupMotionLocationManager()
+        setupElevationManager()
     }
     
     func setModelContext(_ context: ModelContext) {
@@ -242,6 +246,11 @@ final class LocationTrackingManager: NSObject {
         
         // Configure battery optimization based on adaptive GPS settings
         motionLocationManager.setBatteryOptimizedMode(adaptiveGPSManager.batteryOptimizationEnabled)
+    }
+    
+    private func setupElevationManager() {
+        // Elevation manager setup is handled in its initialization
+        // Additional configuration can be added here if needed
     }
     
     private func applyGPSConfiguration(_ config: GPSConfiguration) {
@@ -281,11 +290,12 @@ final class LocationTrackingManager: NSObject {
         // Start motion tracking for enhanced accuracy
         motionLocationManager.startMotionTracking()
         
-        // Start altimeter if available
-        if CMAltimeter.isRelativeAltitudeAvailable() {
-            altimeter.startRelativeAltitudeUpdates(to: .main) { [weak self] data, error in
-                guard let self = self, let data = data, error == nil else { return }
-                self.processAltitudeUpdate(data)
+        // Start elevation tracking with advanced sensor fusion
+        Task {
+            do {
+                try await elevationManager.startTracking()
+            } catch {
+                print("Failed to start elevation tracking: \(error.localizedDescription)")
             }
         }
         
@@ -322,7 +332,7 @@ final class LocationTrackingManager: NSObject {
         locationManager.stopUpdatingLocation()
         locationManager.stopUpdatingHeading()
         motionLocationManager.stopMotionTracking()
-        altimeter.stopRelativeAltitudeUpdates()
+        elevationManager.stopTracking()
         stopAutoPauseMonitoring()
         
         // Reset state
@@ -381,11 +391,47 @@ final class LocationTrackingManager: NSObject {
         // Check for movement (for auto-pause)
         checkForMovement(location)
         
-        // Add location to session
+        // Process location through elevation manager for sensor fusion
+        Task {
+            await elevationManager.processLocationUpdate(location)
+        }
+        
+        // Add location to session with comprehensive elevation and grade data
         if let session = currentSession, let context = modelContext {
             let locationPoint = LocationPoint(from: location)
+            
+            // Update with elevation data if available
+            if let elevationData = elevationManager.currentElevationData {
+                locationPoint.updateElevationData(
+                    barometricAltitude: elevationData.barometricAltitude,
+                    fusedAltitude: elevationData.fusedAltitude,
+                    accuracy: elevationData.accuracy,
+                    confidence: elevationData.confidence,
+                    grade: elevationData.currentGrade,
+                    pressure: elevationData.pressure
+                )
+            }
+            
             session.locationPoints.append(locationPoint)
             context.insert(locationPoint)
+            
+            // Process through enhanced grade calculator for real-time metrics
+            Task {
+                if let gradeResult = await elevationManager.processLocationPoint(locationPoint) {
+                    // Update real-time metrics based on grade calculation results
+                    if gradeResult.meetsPrecisionTarget {
+                        // Store high-precision grade data
+                        locationPoint.instantaneousGrade = gradeResult.smoothedGrade
+                    }
+                }
+            }
+            
+            // Update session elevation metrics periodically with enhanced calculation
+            if session.locationPoints.count % 10 == 0 {
+                Task {
+                    await session.updateElevationMetrics()
+                }
+            }
         }
         
         // Calculate distance
@@ -434,13 +480,6 @@ final class LocationTrackingManager: NSObject {
         }
     }
     
-    private func processAltitudeUpdate(_ data: CMAltitudeData) {
-        // Update the last location point with barometric altitude
-        if let session = currentSession,
-           let lastPoint = session.locationPoints.last {
-            lastPoint.barometricAltitude = data.relativeAltitude.doubleValue
-        }
-    }
     
     // MARK: - Auto-pause
     private func startAutoPauseMonitoring() {
@@ -551,6 +590,76 @@ final class LocationTrackingManager: NSObject {
         return motionLocationManager.motionPredictedLocation
     }
     
+    // MARK: - Elevation Management
+    
+    /// Calibrates elevation to a known reference point
+    func calibrateElevation(to knownElevation: Double) async throws {
+        try await elevationManager.calibrateToKnownElevation(knownElevation)
+    }
+    
+    /// Returns current elevation data
+    var currentElevationData: ElevationData? {
+        return elevationManager.currentElevationData
+    }
+    
+    /// Returns elevation accuracy metrics
+    var elevationAccuracy: Double {
+        return elevationManager.currentElevationData?.accuracy ?? Double.infinity
+    }
+    
+    /// Returns elevation confidence score
+    var elevationConfidence: Double {
+        return elevationManager.currentElevationData?.confidence ?? 0.0
+    }
+    
+    /// Returns whether elevation data meets accuracy target (±1 meter)
+    var meetsElevationAccuracyTarget: Bool {
+        return elevationManager.currentElevationData?.meetsAccuracyTarget ?? false
+    }
+    
+    /// Returns current grade percentage from the enhanced grade calculator
+    func getCurrentGrade() async -> Double {
+        let (instantaneous, _) = await elevationManager.currentGradeMetrics
+        return instantaneous
+    }
+    
+    /// Returns smoothed grade percentage for more stable display
+    func getSmoothedGrade() async -> Double {
+        let (_, smoothed) = await elevationManager.currentGradeMetrics
+        return smoothed
+    }
+    
+    /// Returns cumulative elevation gain and loss from enhanced tracking
+    func getCumulativeElevation() async -> (gain: Double, loss: Double) {
+        return await elevationManager.elevationMetrics
+    }
+    
+    /// Returns elevation profile data for visualization
+    func getElevationProfile() async -> [GradeCalculator.ElevationPoint] {
+        return await elevationManager.getElevationProfile()
+    }
+    
+    /// Returns recent grade history for analysis
+    func getGradeHistory() async -> [GradeCalculator.GradePoint] {
+        return await elevationManager.getRecentGradeHistory()
+    }
+    
+    /// Calculates average grade over current session for enhanced precision
+    func calculateSessionAverageGrade() async -> GradeCalculator.GradeResult? {
+        guard let session = currentSession, !session.locationPoints.isEmpty else { return nil }
+        return await elevationManager.calculateAverageGrade(over: session.locationPoints)
+    }
+    
+    /// Updates elevation tracking configuration
+    func updateElevationConfiguration(_ configuration: ElevationConfiguration) {
+        elevationManager.updateConfiguration(configuration)
+    }
+    
+    /// Resets elevation metrics
+    func resetElevationMetrics() {
+        elevationManager.resetMetrics()
+    }
+    
     // MARK: - Battery Status
     
     var batteryUsageEstimate: Double {
@@ -572,6 +681,8 @@ final class LocationTrackingManager: NSObject {
         \(adaptiveGPSManager.debugInfo)
         
         \(motionLocationManager.debugInfo)
+        
+        \(elevationManager.debugInfo)
         """
     }
 }
