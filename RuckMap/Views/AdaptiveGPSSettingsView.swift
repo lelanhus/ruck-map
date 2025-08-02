@@ -273,6 +273,8 @@ struct AdaptiveGPSSettingsView: View {
             return .orange
         case .critical:
             return .red
+        case .ultraLowPower:
+            return .purple
         }
     }
     

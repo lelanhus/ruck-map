@@ -458,6 +458,8 @@ final class AdaptiveGPSManager: NSObject {
             return "Low Power Mode: GPS accuracy reduced to preserve battery"
         case .critical:
             return "Critical battery: GPS switched to minimal accuracy mode"
+        case .ultraLowPower:
+            return "Ultra Low Power Mode: GPS using minimal updates for extended sessions"
         }
     }
 }

@@ -52,6 +52,16 @@ struct ActiveTrackingView: View {
         return String(format: "%.0f ft", feet)
     }
     
+    private var formattedCalories: String {
+        let calories = locationManager.totalCaloriesBurned
+        return String(format: "%.0f cal", calories)
+    }
+    
+    private var formattedCalorieBurnRate: String {
+        let rate = locationManager.currentCalorieBurnRate
+        return String(format: "%.1f cal/min", rate)
+    }
+    
     private var gradeColor: Color {
         let absGrade = abs(currentGrade)
         switch absGrade {
@@ -266,6 +276,23 @@ struct ActiveTrackingView: View {
                         icon: currentGrade >= 0 ? "arrow.up.right" : "arrow.down.right",
                         color: gradeColor
                     )
+                    
+                    // Calorie metrics row
+                    HStack(spacing: 12) {
+                        MetricCard(
+                            title: "CALORIES",
+                            value: formattedCalories,
+                            icon: "flame.fill",
+                            color: .red
+                        )
+                        
+                        MetricCard(
+                            title: "BURN RATE",
+                            value: formattedCalorieBurnRate,
+                            icon: "speedometer",
+                            color: .orange
+                        )
+                    }
                     
                     // Elevation metrics row
                     HStack(spacing: 12) {

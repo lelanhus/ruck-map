@@ -85,6 +85,9 @@ final class LocationTrackingManager: NSObject {
     // Battery optimization
     private(set) var batteryOptimizationManager: BatteryOptimizationManager
     
+    // Calorie calculation
+    private(set) var calorieCalculator: CalorieCalculator
+    
     // MARK: - Private Properties
     private let locationManager = CLLocationManager()
     private var modelContext: ModelContext?
@@ -107,6 +110,7 @@ final class LocationTrackingManager: NSObject {
         self.motionLocationManager = MotionLocationManager()
         self.elevationManager = ElevationManager()
         self.batteryOptimizationManager = BatteryOptimizationManager()
+        self.calorieCalculator = CalorieCalculator()
         
         super.init()
         setupLocationManager()
@@ -177,6 +181,9 @@ final class LocationTrackingManager: NSObject {
         isAutoPaused = false
         recentLocations.removeAll()
         
+        // Reset calorie calculation for new session
+        calorieCalculator.reset()
+        
         // Initialize battery optimization for session
         batteryOptimizationManager.startSession(optimizationLevel: .balanced)
         
@@ -190,6 +197,11 @@ final class LocationTrackingManager: NSObject {
         // Start elevation tracking
         elevationManager.startTracking()
         
+        // Start calorie calculation if session has load weight
+        if session.loadWeight > 0 {
+            startCalorieTracking(bodyWeight: 70.0, loadWeight: session.loadWeight) // TODO: Get actual body weight from user profile
+        }
+        
         // Start auto-pause monitoring
         startAutoPauseMonitoring()
     }
@@ -201,6 +213,7 @@ final class LocationTrackingManager: NSObject {
         locationManager.stopUpdatingLocation()
         motionLocationManager.stopMotionTracking()
         elevationManager.stopTracking()
+        calorieCalculator.stopContinuousCalculation()
         stopAutoPauseMonitoring()
     }
     
@@ -211,6 +224,12 @@ final class LocationTrackingManager: NSObject {
         locationManager.startUpdatingLocation()
         motionLocationManager.startMotionTracking()
         elevationManager.startTracking()
+        
+        // Resume calorie calculation if session has load weight
+        if let session = currentSession, session.loadWeight > 0 {
+            startCalorieTracking(bodyWeight: 70.0, loadWeight: session.loadWeight) // TODO: Get actual body weight from user profile
+        }
+        
         startAutoPauseMonitoring()
     }
     
@@ -226,6 +245,9 @@ final class LocationTrackingManager: NSObject {
         // Stop elevation tracking
         elevationManager.stopTracking()
         
+        // Stop calorie calculation
+        calorieCalculator.stopContinuousCalculation()
+        
         // Stop auto-pause monitoring
         stopAutoPauseMonitoring()
         
@@ -235,6 +257,7 @@ final class LocationTrackingManager: NSObject {
             session.totalDistance = totalDistance
             session.distance = totalDistance
             session.averagePace = averagePace
+            session.totalCalories = calorieCalculator.totalCalories
             // isActive is computed property, don't need to set
             
             // Save context
@@ -542,9 +565,75 @@ final class LocationTrackingManager: NSObject {
         return batteryOptimizationManager.getOptimizationReport()
     }
     
+    /// Start calorie tracking with body and load weight
+    private func startCalorieTracking(bodyWeight: Double, loadWeight: Double) {
+        calorieCalculator.startContinuousCalculation(
+            bodyWeight: bodyWeight,
+            loadWeight: loadWeight,
+            locationProvider: { @MainActor [weak self] in
+                guard let self = self else { 
+                    return (location: nil, grade: nil, terrain: nil)
+                }
+                
+                let location = self.currentLocation
+                let grade = self.elevationManager.currentGrade
+                
+                // Determine terrain type from current session's terrain segments
+                let terrain = self.getCurrentTerrain()
+                
+                return (location: location, grade: grade, terrain: terrain)
+            },
+            weatherProvider: { @MainActor [weak self] in
+                guard let conditions = self?.currentSession?.weatherConditions else { 
+                    return nil
+                }
+                return WeatherData(from: conditions)
+            }
+        )
+    }
+    
+    /// Get current terrain type based on session terrain segments
+    private func getCurrentTerrain() -> TerrainType? {
+        guard let session = currentSession else { return nil }
+        
+        let now = Date()
+        
+        // Find the most recent terrain segment that contains the current time
+        let currentTerrain = session.terrainSegments
+            .filter { $0.startTime <= now && $0.endTime >= now }
+            .max(by: { $0.startTime < $1.startTime })
+        
+        return currentTerrain?.terrainType ?? .trail // Default to trail if no specific terrain set
+    }
+    
     /// Enable or disable auto-optimization
     func setAutoOptimization(_ enabled: Bool) {
         batteryOptimizationManager.setAutoOptimization(enabled)
+    }
+    
+    /// Get current calorie burn rate (kcal/min)
+    var currentCalorieBurnRate: Double {
+        calorieCalculator.currentMetabolicRate
+    }
+    
+    /// Get total calories burned in current session
+    var totalCaloriesBurned: Double {
+        calorieCalculator.totalCalories
+    }
+    
+    /// Get average calorie burn rate over recent period
+    func getAverageCalorieBurnRate(overLastMinutes minutes: Double = 5.0) -> Double {
+        calorieCalculator.getAverageMetabolicRate(overLastMinutes: minutes)
+    }
+    
+    /// Get calorie calculation history
+    var calorieCalculationHistory: [CalorieCalculationResult] {
+        calorieCalculator.getCalculationHistory()
+    }
+    
+    /// Reset calorie calculation (useful for new sessions)
+    func resetCalorieCalculation() {
+        calorieCalculator.reset()
     }
     
     /// Get debug information
@@ -587,6 +676,12 @@ final class LocationTrackingManager: NSObject {
         Confidence: \(String(format: "%.0f", elevationManager.elevationConfidence * 100))%
         Battery Mode: \(elevationManager.batteryOptimizedMode)
         Barometer: \(elevationManager.isBarometerAvailable ? "Available" : "Unavailable")
+        
+        === Calorie Calculation ===
+        Current Rate: \(String(format: "%.2f", calorieCalculator.currentMetabolicRate)) kcal/min
+        Total Calories: \(String(format: "%.1f", calorieCalculator.totalCalories)) kcal
+        Calculating: \(calorieCalculator.isCalculating ? "Yes" : "No")
+        History Points: \(calorieCalculator.getCalculationHistory().count)
         """
     }
 }
