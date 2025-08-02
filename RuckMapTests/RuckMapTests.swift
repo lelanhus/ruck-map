@@ -26,7 +26,7 @@ struct RuckMapTests {
     @Test("RuckSession convenience initializer sets load weight")
     func testRuckSessionConvenienceInit() async throws {
         let loadWeight = 15.0 // kg
-        let session = RuckSession(loadWeight: loadWeight)
+        let session = try RuckSession(loadWeight: loadWeight)
         
         #expect(session.loadWeight == loadWeight)
     }

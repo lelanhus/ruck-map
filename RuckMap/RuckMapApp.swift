@@ -19,10 +19,6 @@ struct RuckMapApp: App {
 
         do {
             let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
-            
-            // Configure for background processing
-            container.mainContext.automaticallyMergesChangesFromParent = true
-            
             return container
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
