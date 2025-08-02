@@ -14,6 +14,10 @@ final class LocationPoint {
     var course: Double // degrees
     var barometricAltitude: Double? // meters from barometer
     var heartRate: Double? // bpm from HealthKit
+    var isKeyPoint: Bool // For Douglas-Peucker compression
+    
+    @Relationship(inverse: \RuckSession.locationPoints)
+    var session: RuckSession?
     
     init(
         timestamp: Date,
@@ -23,7 +27,8 @@ final class LocationPoint {
         horizontalAccuracy: Double,
         verticalAccuracy: Double,
         speed: Double,
-        course: Double
+        course: Double,
+        isKeyPoint: Bool = false
     ) {
         self.timestamp = timestamp
         self.latitude = latitude
@@ -33,9 +38,10 @@ final class LocationPoint {
         self.verticalAccuracy = verticalAccuracy
         self.speed = speed
         self.course = course
+        self.isKeyPoint = isKeyPoint
     }
     
-    convenience init(from location: CLLocation) {
+    convenience init(from location: CLLocation, isKeyPoint: Bool = false) {
         self.init(
             timestamp: location.timestamp,
             latitude: location.coordinate.latitude,
@@ -44,7 +50,8 @@ final class LocationPoint {
             horizontalAccuracy: location.horizontalAccuracy,
             verticalAccuracy: location.verticalAccuracy,
             speed: max(0, location.speed), // Ensure non-negative
-            course: location.course >= 0 ? location.course : 0
+            course: location.course >= 0 ? location.course : 0,
+            isKeyPoint: isKeyPoint
         )
     }
     
@@ -62,5 +69,13 @@ final class LocationPoint {
             speed: speed,
             timestamp: timestamp
         )
+    }
+    
+    func distance(to other: LocationPoint) -> Double {
+        clLocation.distance(from: other.clLocation)
+    }
+    
+    var isAccurate: Bool {
+        horizontalAccuracy <= 10.0 && horizontalAccuracy > 0
     }
 }

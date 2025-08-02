@@ -60,6 +60,9 @@ final class TerrainSegment {
     var confidence: Double // 0.0 to 1.0
     var isManuallySet: Bool
     
+    @Relationship(inverse: \RuckSession.terrainSegments)
+    var session: RuckSession?
+    
     var terrainType: TerrainType {
         get { TerrainType(rawValue: terrainTypeRaw) ?? .pavedRoad }
         set { terrainTypeRaw = newValue.rawValue }
@@ -83,5 +86,13 @@ final class TerrainSegment {
     
     var duration: TimeInterval {
         endTime.timeIntervalSince(startTime)
+    }
+    
+    var adjustedDifficulty: Double {
+        terrainType.terrainFactor * (1.0 + max(0, grade / 100.0))
+    }
+    
+    func overlaps(with other: TerrainSegment) -> Bool {
+        !(endTime <= other.startTime || startTime >= other.endTime)
     }
 }

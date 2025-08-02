@@ -10,10 +10,20 @@ struct RuckMapApp: App {
             TerrainSegment.self,
             WeatherConditions.self
         ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+        
+        let modelConfiguration = ModelConfiguration(
+            schema: schema,
+            url: URL.documentsDirectory.appending(path: "RuckMap.store"),
+            cloudKitDatabase: .automatic
+        )
 
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+            
+            // Configure for background processing
+            container.mainContext.automaticallyMergesChangesFromParent = true
+            
+            return container
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
         }

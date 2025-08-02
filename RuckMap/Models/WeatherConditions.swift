@@ -13,6 +13,9 @@ final class WeatherConditions {
     var weatherDescription: String?
     var conditionCode: String? // WeatherKit condition code
     
+    @Relationship(inverse: \RuckSession.weatherConditions)
+    var session: RuckSession?
+    
     init(
         timestamp: Date = Date(),
         temperature: Double,
@@ -64,5 +67,52 @@ final class WeatherConditions {
         return temperature < -5 || temperature > 35 ||
                windSpeed > 15 || // > 54 km/h
                precipitation > 10 // Heavy rain
+    }
+    
+    var temperatureAdjustmentFactor: Double {
+        // Based on LCDA algorithm temperature adjustments
+        if temperature < -5 {
+            return 1.15
+        } else if temperature < 5 {
+            return 1.05
+        } else if temperature > 25 {
+            return 1.05
+        } else if temperature > 30 {
+            return 1.15
+        }
+        return 1.0
+    }
+    
+    var weatherSeverityScore: Double {
+        var score = 1.0
+        
+        // Temperature stress
+        if temperature < -10 || temperature > 40 {
+            score += 0.3
+        } else if temperature < 0 || temperature > 35 {
+            score += 0.2
+        } else if temperature < 5 || temperature > 30 {
+            score += 0.1
+        }
+        
+        // Wind factor
+        if windSpeed > 20 {
+            score += 0.3
+        } else if windSpeed > 15 {
+            score += 0.2
+        } else if windSpeed > 10 {
+            score += 0.1
+        }
+        
+        // Precipitation
+        if precipitation > 15 {
+            score += 0.3
+        } else if precipitation > 5 {
+            score += 0.2
+        } else if precipitation > 0 {
+            score += 0.1
+        }
+        
+        return min(score, 2.0) // Cap at 2.0
     }
 }
