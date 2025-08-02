@@ -270,19 +270,9 @@ struct SessionDetailView: View {
         
         Task {
             do {
-                let exportManager = ExportManager()
-                
-                let result: ExportManager.ExportResult
-                switch format {
-                case .gpx:
-                    result = try await exportManager.exportToGPX(session: session)
-                case .csv:
-                    result = try await exportManager.exportToCSV(session: session)
-                case .json:
-                    result = try await exportManager.exportToJSON(session: session)
-                }
-                exportURL = result.url
-                
+                let sessionId = session.id
+                let url = try await dataCoordinator.exportSession(sessionId: sessionId, format: format)
+                exportURL = url
                 showingShareSheet = true
             } catch {
                 exportError = error
@@ -296,7 +286,7 @@ struct SessionDetailView: View {
         Task {
             do {
                 let shareManager = ShareManager()
-                await shareManager.shareSession(session, format: .gpx, dataCoordinator: dataCoordinator)
+                await shareManager.shareSession(sessionId: session.id, format: .gpx, dataCoordinator: dataCoordinator)
             } catch {
                 exportError = error
             }

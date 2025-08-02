@@ -41,7 +41,65 @@ actor ExportManager {
         let duration: TimeInterval
     }
     
-    // MARK: - Public Export Methods
+    // MARK: - Public Export Methods (SessionExportData)
+    
+    /// Exports session data to GPX format
+    func exportToGPX(sessionData: SessionExportData) async throws -> ExportResult {
+        logger.info("Exporting session \(sessionData.id) to GPX")
+        
+        // Create simple GPX without location data for now
+        let gpxContent = createSimpleGPX(from: sessionData)
+        let fileName = "RuckMap_\(sessionData.id.uuidString)_\(Date().timeIntervalSince1970).gpx"
+        let url = try await saveToFile(content: gpxContent, fileName: fileName)
+        
+        return ExportResult(
+            url: url,
+            format: .gpx,
+            fileSize: Int64(gpxContent.data(using: .utf8)?.count ?? 0),
+            pointCount: 0,
+            duration: 0
+        )
+    }
+    
+    /// Exports session data to CSV format
+    func exportToCSV(sessionData: SessionExportData) async throws -> ExportResult {
+        logger.info("Exporting session \(sessionData.id) to CSV")
+        
+        let csvContent = createSimpleCSV(from: sessionData)
+        let fileName = "RuckMap_\(sessionData.id.uuidString)_\(Date().timeIntervalSince1970).csv"
+        let url = try await saveToFile(content: csvContent, fileName: fileName)
+        
+        return ExportResult(
+            url: url,
+            format: .csv,
+            fileSize: Int64(csvContent.data(using: .utf8)?.count ?? 0),
+            pointCount: 0,
+            duration: 0
+        )
+    }
+    
+    /// Exports session data to JSON format
+    func exportToJSON(sessionData: SessionExportData) async throws -> ExportResult {
+        logger.info("Exporting session \(sessionData.id) to JSON")
+        
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        
+        let data = try encoder.encode(sessionData)
+        let fileName = "RuckMap_\(sessionData.id.uuidString)_\(Date().timeIntervalSince1970).json"
+        let url = try await saveToFile(data: data, fileName: fileName)
+        
+        return ExportResult(
+            url: url,
+            format: .json,
+            fileSize: Int64(data.count),
+            pointCount: 0,
+            duration: 0
+        )
+    }
+    
+    // MARK: - Public Export Methods (Full Session)
     
     /// Exports a session to GPX format with elevation data
     func exportToGPX(session: RuckSession) async throws -> ExportResult {
@@ -292,6 +350,27 @@ actor ExportManager {
         return exportsURL
     }
     
+    /// Saves to file from content string
+    private func saveToFile(content: String, fileName: String) async throws -> URL {
+        guard let data = content.data(using: .utf8) else {
+            throw ExportError.exportFailed(NSError(domain: "ExportManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to convert content to data"]))
+        }
+        return try await saveToFile(data: data, fileName: fileName)
+    }
+    
+    /// Saves to file from data
+    private func saveToFile(data: Data, fileName: String) async throws -> URL {
+        let tempDir = FileManager.default.temporaryDirectory
+        let url = tempDir.appendingPathComponent(fileName)
+        
+        do {
+            try data.write(to: url)
+            return url
+        } catch {
+            throw ExportError.exportFailed(error)
+        }
+    }
+    
     /// Saves export to permanent location
     func saveExportPermanently(temporaryURL: URL, filename: String) async throws -> URL {
         let exportsDir = try getExportsDirectory()
@@ -327,6 +406,46 @@ actor ExportManager {
         }
         
         logger.info("Cleaned up \(deletedCount) old export files")
+    }
+    
+    // MARK: - Simple Export Helpers
+    
+    private func createSimpleGPX(from data: SessionExportData) -> String {
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <gpx version="1.1" creator="RuckMap">
+            <metadata>
+                <name>Ruck Session \(data.id)</name>
+                <time>\(ISO8601DateFormatter().string(from: data.startDate))</time>
+            </metadata>
+            <trk>
+                <name>Ruck Session</name>
+                <desc>Distance: \(String(format: "%.2f", data.totalDistance / 1000)) km, Load: \(data.loadWeight) kg</desc>
+                <extensions>
+                    <calories>\(Int(data.totalCalories))</calories>
+                    <avgPace>\(data.averagePace)</avgPace>
+                    <elevationGain>\(data.elevationGain)</elevationGain>
+                    <elevationLoss>\(data.elevationLoss)</elevationLoss>
+                </extensions>
+            </trk>
+        </gpx>
+        """
+    }
+    
+    private func createSimpleCSV(from data: SessionExportData) -> String {
+        var csv = "Session ID,Start Date,End Date,Distance (km),Load (kg),Calories,Avg Pace (min/km),Elevation Gain (m),Elevation Loss (m)\n"
+        
+        csv += "\"\(data.id)\","
+        csv += "\"\(ISO8601DateFormatter().string(from: data.startDate))\","
+        csv += "\"\(data.endDate.map { ISO8601DateFormatter().string(from: $0) } ?? "")\","
+        csv += "\(String(format: "%.2f", data.totalDistance / 1000)),"
+        csv += "\(data.loadWeight),"
+        csv += "\(Int(data.totalCalories)),"
+        csv += "\(String(format: "%.2f", data.averagePace)),"
+        csv += "\(String(format: "%.1f", data.elevationGain)),"
+        csv += "\(String(format: "%.1f", data.elevationLoss))"
+        
+        return csv
     }
     
     // MARK: - Utilities

@@ -6,8 +6,7 @@ import OSLog
 actor TrackCompressor {
     private let logger = Logger(subsystem: "com.ruckmap.app", category: "TrackCompressor")
     
-    struct CompressionResult {
-        let compressedPoints: [LocationPoint]
+    struct CompressionResult: Sendable {
         let compressionRatio: Double
         let originalCount: Int
         let compressedCount: Int
@@ -20,16 +19,16 @@ actor TrackCompressor {
     ///   - epsilon: Tolerance for compression (meters). Smaller values = less compression
     ///   - preserveElevationChanges: Whether to preserve significant elevation changes
     ///   - elevationThreshold: Minimum elevation change to preserve (meters)
-    /// - Returns: Array of compressed LocationPoint objects
-    func compress(
+    /// - Returns: Indices of points to keep
+    func compressToIndices(
         points: [LocationPoint],
         epsilon: Double = 5.0,
         preserveElevationChanges: Bool = true,
         elevationThreshold: Double = 2.0
-    ) async -> [LocationPoint] {
+    ) async -> [Int] {
         guard points.count > 2 else {
             logger.debug("Too few points to compress: \(points.count)")
-            return points
+            return Array(0..<points.count)
         }
         
         let startTime = CFAbsoluteTimeGetCurrent()
@@ -52,25 +51,44 @@ actor TrackCompressor {
         // Step 3: Combine key points with compressed points
         keyPoints.formUnion(compressedIndices)
         
-        // Step 4: Create final compressed array
-        let compressedPoints = keyPoints.sorted().map { points[$0] }
+        // Step 4: Return sorted indices
+        let sortedIndices = keyPoints.sorted()
+        
+        let endTime = CFAbsoluteTimeGetCurrent()
+        let compressionRatio = Double(sortedIndices.count) / Double(points.count)
+        
+        logger.info("""
+            Track compression completed:
+            - Original: \(points.count) points
+            - Compressed: \(sortedIndices.count) points
+            - Ratio: \(String(format: "%.1f", compressionRatio * 100))%
+            - Epsilon: \(epsilon)m
+            - Processing time: \(String(format: "%.3f", endTime - startTime))s
+            """)
+        
+        return sortedIndices
+    }
+    
+    /// Compresses GPS track and returns compressed points (for internal actor use)
+    func compress(
+        points: [LocationPoint],
+        epsilon: Double = 5.0,
+        preserveElevationChanges: Bool = true,
+        elevationThreshold: Double = 2.0
+    ) async -> [LocationPoint] {
+        let indices = await compressToIndices(
+            points: points,
+            epsilon: epsilon,
+            preserveElevationChanges: preserveElevationChanges,
+            elevationThreshold: elevationThreshold
+        )
+        
+        let compressedPoints = indices.map { points[$0] }
         
         // Mark compressed points as key points
         for point in compressedPoints {
             point.isKeyPoint = true
         }
-        
-        let endTime = CFAbsoluteTimeGetCurrent()
-        let compressionRatio = Double(compressedPoints.count) / Double(points.count)
-        
-        logger.info("""
-            Track compression completed:
-            - Original: \(points.count) points
-            - Compressed: \(compressedPoints.count) points
-            - Ratio: \(String(format: "%.1f", compressionRatio * 100))%
-            - Epsilon: \(epsilon)m
-            - Processing time: \(String(format: "%.3f", endTime - startTime))s
-            """)
         
         return compressedPoints
     }
@@ -83,23 +101,21 @@ actor TrackCompressor {
         elevationThreshold: Double = 2.0
     ) async -> CompressionResult {
         let originalCount = points.count
-        let compressedPoints = await compress(
+        let compressedIndices = await compressToIndices(
             points: points,
             epsilon: epsilon,
             preserveElevationChanges: preserveElevationChanges,
             elevationThreshold: elevationThreshold
         )
         
-        let compressedCount = compressedPoints.count
+        let compressedCount = compressedIndices.count
         let compressionRatio = Double(compressedCount) / Double(originalCount)
-        let keyPointCount = compressedPoints.filter { $0.isKeyPoint }.count
         
         return CompressionResult(
-            compressedPoints: compressedPoints,
             compressionRatio: compressionRatio,
             originalCount: originalCount,
             compressedCount: compressedCount,
-            preservedKeyPoints: keyPointCount
+            preservedKeyPoints: compressedCount
         )
     }
     

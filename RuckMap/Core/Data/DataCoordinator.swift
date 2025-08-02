@@ -14,7 +14,7 @@ class DataCoordinator: ObservableObject {
     private let sessionManager: SessionManager
     private let migrationManager: MigrationManager
     private let exportManager: ExportManager
-    private let trackCompressor: TrackCompressor
+    // Removed trackCompressor - compression handled by SessionManager
     
     // Published state
     @Published var isInitialized = false
@@ -44,10 +44,10 @@ class DataCoordinator: ObservableObject {
         
         do {
             self.modelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])
-            self.sessionManager = SessionManager(container: modelContainer)
+            self.sessionManager = SessionManager(modelContainer: modelContainer)
             self.migrationManager = MigrationManager()
             self.exportManager = ExportManager()
-            self.trackCompressor = TrackCompressor()
+            // TrackCompressor is now used internally by SessionManager
             
             logger.info("DataCoordinator initialized successfully")
         } catch {
@@ -78,8 +78,9 @@ class DataCoordinator: ObservableObject {
             try await exportManager.cleanupOldExports()
             
             // Check for incomplete sessions
-            if let incompleteSession = try await sessionManager.restoreIncompleteSession() {
-                logger.info("Restored incomplete session: \(incompleteSession.id)")
+            let hasIncompleteSession = try await sessionManager.hasIncompleteSession()
+            if hasIncompleteSession {
+                logger.info("Found incomplete session to restore")
             }
             
             isInitialized = true
@@ -94,34 +95,41 @@ class DataCoordinator: ObservableObject {
     // MARK: - Session Management
     
     /// Creates a new ruck session
-    func createSession(loadWeight: Double) async throws -> RuckSession {
-        return try await sessionManager.createSession(loadWeight: loadWeight)
+    func createSession(loadWeight: Double) async throws -> UUID {
+        return try await sessionManager.createSessionAndReturnId(loadWeight: loadWeight)
     }
     
-    /// Gets the current active session
-    func getActiveSession() async throws -> RuckSession? {
-        return try await sessionManager.fetchActiveSession()
+    /// Gets the current active session ID
+    func getActiveSessionId() async throws -> UUID? {
+        return try await sessionManager.fetchActiveSessionId()
     }
     
-    /// Gets all sessions
-    func getAllSessions(limit: Int = 100) async throws -> [RuckSession] {
-        return try await sessionManager.fetchAllSessions(limit: limit)
+    /// Gets all session IDs
+    func getAllSessionIds(limit: Int = 100) async throws -> [UUID] {
+        return try await sessionManager.fetchAllSessionIds(limit: limit)
     }
     
-    /// Gets a specific session
-    func getSession(id: UUID) async throws -> RuckSession? {
-        return try await sessionManager.fetchSession(id: id)
+    /// Checks if a session exists
+    func sessionExists(id: UUID) async throws -> Bool {
+        // Check if session exists by trying to get its export data
+        let data = try await getSessionExportData(id: id)
+        return data != nil
+    }
+    
+    /// Gets session data for export
+    func getSessionExportData(id: UUID) async throws -> SessionExportData? {
+        return try await sessionManager.getSessionExportData(id: id)
     }
     
     /// Completes a session
     func completeSession(
-        _ session: RuckSession,
+        sessionId: UUID,
         totalDistance: Double,
         totalCalories: Double,
         averagePace: Double
     ) async throws {
-        try await sessionManager.completeSession(
-            session,
+        try await sessionManager.completeSessionById(
+            sessionId,
             totalDistance: totalDistance,
             totalCalories: totalCalories,
             averagePace: averagePace
@@ -129,83 +137,91 @@ class DataCoordinator: ObservableObject {
     }
     
     /// Deletes a session
-    func deleteSession(_ session: RuckSession) async throws {
-        try await sessionManager.deleteSession(session)
+    func deleteSession(sessionId: UUID) async throws {
+        try await sessionManager.deleteSessionById(sessionId)
     }
     
     // MARK: - Location Tracking
     
     /// Adds a location point to the active session
-    func addLocationPoint(to session: RuckSession, from location: CLLocation) async throws {
-        try await sessionManager.addLocationPoint(to: session, from: location)
+    func addLocationPoint(to sessionId: UUID, from location: CLLocation) async throws {
+        try await sessionManager.addLocationPointById(to: sessionId, from: location)
     }
     
     /// Adds multiple location points with optional compression
     func addLocationPoints(
-        to session: RuckSession,
-        points: [LocationPoint],
+        to sessionId: UUID,
+        locations: [CLLocation],
         compress: Bool = false,
         compressionEpsilon: Double = 5.0
     ) async throws {
-        var finalPoints = points
-        
-        if compress && points.count > 100 {
-            // Compress points if there are many
-            finalPoints = await trackCompressor.compress(
-                points: points,
-                epsilon: compressionEpsilon
-            )
-            
-            logger.info("Compressed \(points.count) points to \(finalPoints.count)")
+        if compress && locations.count > 100 {
+            // Compression will be handled by SessionManager
+            logger.info("Compression requested for \(locations.count) points")
         }
         
-        try await sessionManager.addLocationPoints(to: session, points: finalPoints)
+        // Convert to location point data
+        let pointData = locations.map { LocationPointData(from: $0) }
+        
+        try await sessionManager.addLocationPointsFromData(to: sessionId, pointData: pointData)
     }
     
     // MARK: - Data Export
     
     /// Exports a session to GPX format
-    func exportSessionToGPX(_ session: RuckSession) async throws -> URL {
-        let result = try await exportManager.exportToGPX(session: session)
+    func exportSessionToGPX(sessionId: UUID) async throws -> URL {
+        guard let sessionData = try await getSessionExportData(id: sessionId) else {
+            throw ExportManager.ExportError.sessionNotFound
+        }
+        
+        let result = try await exportManager.exportToGPX(sessionData: sessionData)
         
         // Save to permanent location
-        let filename = "RuckSession_\(session.startDate.formatted(.iso8601))_\(session.id.uuidString.prefix(8)).gpx"
+        let filename = "RuckSession_\(sessionData.startDate.formatted(.iso8601))_\(sessionData.id.uuidString.prefix(8)).gpx"
         return try await exportManager.saveExportPermanently(temporaryURL: result.url, filename: filename)
     }
     
     /// Exports a session to CSV format
-    func exportSessionToCSV(_ session: RuckSession) async throws -> URL {
-        let result = try await exportManager.exportToCSV(session: session)
+    func exportSessionToCSV(sessionId: UUID) async throws -> URL {
+        guard let sessionData = try await getSessionExportData(id: sessionId) else {
+            throw ExportManager.ExportError.sessionNotFound
+        }
+        
+        let result = try await exportManager.exportToCSV(sessionData: sessionData)
         
         // Save to permanent location
-        let filename = "RuckSession_\(session.startDate.formatted(.iso8601))_\(session.id.uuidString.prefix(8)).csv"
+        let filename = "RuckSession_\(sessionData.startDate.formatted(.iso8601))_\(sessionData.id.uuidString.prefix(8)).csv"
         return try await exportManager.saveExportPermanently(temporaryURL: result.url, filename: filename)
     }
     
     /// Exports a session with format selection
-    func exportSession(_ session: RuckSession, format: ExportManager.ExportFormat) async throws -> URL {
+    func exportSession(sessionId: UUID, format: ExportManager.ExportFormat) async throws -> URL {
         switch format {
         case .gpx:
-            return try await exportSessionToGPX(session)
+            return try await exportSessionToGPX(sessionId: sessionId)
         case .csv:
-            return try await exportSessionToCSV(session)
+            return try await exportSessionToCSV(sessionId: sessionId)
         case .json:
-            let result = try await exportManager.exportToJSON(session: session)
-            let filename = "RuckSession_\(session.startDate.formatted(.iso8601))_\(session.id.uuidString.prefix(8)).json"
+            guard let sessionData = try await getSessionExportData(id: sessionId) else {
+                throw ExportManager.ExportError.sessionNotFound
+            }
+            
+            let result = try await exportManager.exportToJSON(sessionData: sessionData)
+            let filename = "RuckSession_\(sessionData.startDate.formatted(.iso8601))_\(sessionData.id.uuidString.prefix(8)).json"
             return try await exportManager.saveExportPermanently(temporaryURL: result.url, filename: filename)
         }
     }
     
     /// Exports multiple sessions
-    func exportSessions(_ sessions: [RuckSession], format: ExportManager.ExportFormat) async throws -> [URL] {
+    func exportSessions(sessionIds: [UUID], format: ExportManager.ExportFormat) async throws -> [URL] {
         var urls: [URL] = []
         
-        for session in sessions {
+        for sessionId in sessionIds {
             do {
-                let url = try await exportSession(session, format: format)
+                let url = try await exportSession(sessionId: sessionId, format: format)
                 urls.append(url)
             } catch {
-                logger.error("Failed to export session \(session.id): \(error.localizedDescription)")
+                logger.error("Failed to export session \(sessionId): \(error.localizedDescription)")
                 // Continue with other sessions
             }
         }
@@ -217,61 +233,47 @@ class DataCoordinator: ObservableObject {
     
     /// Compresses a session's location points
     func compressSessionTrack(
-        _ session: RuckSession,
+        sessionId: UUID,
         epsilon: Double = 5.0,
         preserveElevationChanges: Bool = true
-    ) async throws -> TrackCompressor.CompressionResult {
-        let result = await trackCompressor.compressWithResult(
-            points: session.locationPoints,
+    ) async throws -> CompressionStats {
+        // Delegate compression to SessionManager
+        return try await sessionManager.compressSessionTrack(
+            sessionId: sessionId,
             epsilon: epsilon,
             preserveElevationChanges: preserveElevationChanges
         )
-        
-        // Update session with compressed points
-        session.locationPoints.removeAll()
-        session.locationPoints.append(contentsOf: result.compressedPoints)
-        session.updateModificationDate()
-        
-        // Save changes
-        try modelContainer.mainContext.save()
-        
-        logger.info("Compressed session \(session.id): \(result.compressionRatio * 100)% size reduction")
-        
-        return result
     }
     
     // MARK: - Data Validation and Integrity
     
     /// Validates a session's data integrity
-    func validateSession(_ session: RuckSession) async -> [String] {
+    func validateSession(sessionId: UUID) async throws -> [String] {
+        // Get session data through session manager
+        let validationData = try await sessionManager.getSessionValidationData(id: sessionId)
+        
+        guard let data = validationData else {
+            return ["Session not found"]
+        }
+        
         var errors: [String] = []
         
         // Basic validation
-        if session.startDate > Date() {
+        if data.startDate > Date() {
             errors.append("Start date is in the future")
         }
         
-        if let endDate = session.endDate, endDate < session.startDate {
+        if let endDate = data.endDate, endDate < data.startDate {
             errors.append("End date is before start date")
         }
         
-        if session.loadWeight < 0 || session.loadWeight > 200 {
-            errors.append("Invalid load weight: \(session.loadWeight)kg")
+        if data.loadWeight < 0 || data.loadWeight > 200 {
+            errors.append("Invalid load weight: \(data.loadWeight)kg")
         }
         
         // Location data validation
-        for (index, point) in session.locationPoints.enumerated() {
-            if abs(point.latitude) > 90 {
-                errors.append("Invalid latitude at point \(index): \(point.latitude)")
-            }
-            
-            if abs(point.longitude) > 180 {
-                errors.append("Invalid longitude at point \(index): \(point.longitude)")
-            }
-            
-            if point.horizontalAccuracy < 0 {
-                errors.append("Invalid accuracy at point \(index): \(point.horizontalAccuracy)")
-            }
+        for issue in data.locationIssues {
+            errors.append(issue)
         }
         
         return errors

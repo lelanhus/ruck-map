@@ -67,7 +67,7 @@ struct SessionExportView: View {
         defer { isExporting = false }
         
         do {
-            let url = try await dataCoordinator.exportSession(session, format: format)
+            let url = try await dataCoordinator.exportSession(sessionId: session.id, format: format)
             print("Session exported to: \(url.path)")
         } catch {
             exportError = error
@@ -79,7 +79,7 @@ struct SessionExportView: View {
         isExporting = true
         defer { isExporting = false }
         
-        await shareManager.shareSession(session, format: format, dataCoordinator: dataCoordinator)
+        await shareManager.shareSession(sessionId: session.id, format: format, dataCoordinator: dataCoordinator)
     }
 }
 
@@ -242,7 +242,7 @@ struct ExportActionsSection: View {
                 Button("Share as Activity") {
                     Task {
                         await ShareManager().shareSessionAsActivity(
-                            session,
+                            sessionId: session.id,
                             dataCoordinator: try DataCoordinator()
                         )
                     }
@@ -253,7 +253,7 @@ struct ExportActionsSection: View {
                 Button("Share for Analysis") {
                     Task {
                         await ShareManager().shareSessionForAnalysis(
-                            session,
+                            sessionId: session.id,
                             dataCoordinator: try DataCoordinator()
                         )
                     }

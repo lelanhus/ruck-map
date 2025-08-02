@@ -37,24 +37,29 @@ class ShareManager: ObservableObject {
     
     /// Shares a single session with format selection
     func shareSession(
-        _ session: RuckSession,
+        sessionId: UUID,
         format: ExportManager.ExportFormat,
         dataCoordinator: DataCoordinator
     ) async {
         do {
-            logger.info("Starting share for session \(session.id) in \(format.rawValue) format")
+            logger.info("Starting share for session \(sessionId) in \(format.rawValue) format")
             
-            let url = try await dataCoordinator.exportSession(session, format: format)
+            let url = try await dataCoordinator.exportSession(sessionId: sessionId, format: format)
+            
+            // Get session data for summary
+            guard let sessionData = try await dataCoordinator.getSessionExportData(id: sessionId) else {
+                throw ShareError.exportFailed(ExportManager.ExportError.sessionNotFound)
+            }
             
             // Create share items
             var items: [Any] = [url]
             
             // Add session summary as text
-            let summary = createSessionSummary(session)
+            let summary = createSessionSummary(sessionData)
             items.append(summary)
             
             // Add metadata for the file
-            if let metadata = createFileMetadata(url: url, session: session) {
+            if let metadata = createFileMetadata(url: url, sessionData: sessionData) {
                 items.append(metadata)
             }
             
@@ -69,14 +74,14 @@ class ShareManager: ObservableObject {
     
     /// Shares multiple sessions
     func shareSessions(
-        _ sessions: [RuckSession],
+        sessionIds: [UUID],
         format: ExportManager.ExportFormat,
         dataCoordinator: DataCoordinator
     ) async {
         do {
-            logger.info("Starting batch share for \(sessions.count) sessions in \(format.rawValue) format")
+            logger.info("Starting batch share for \(sessionIds.count) sessions in \(format.rawValue) format")
             
-            let urls = try await dataCoordinator.exportSessions(sessions, format: format)
+            let urls = try await dataCoordinator.exportSessions(sessionIds: sessionIds, format: format)
             
             guard !urls.isEmpty else {
                 throw ShareError.noItemsToShare
@@ -84,12 +89,20 @@ class ShareManager: ObservableObject {
             
             var items: [Any] = urls
             
+            // Get session data for summary
+            var sessionDataList: [SessionExportData] = []
+            for sessionId in sessionIds {
+                if let data = try await dataCoordinator.getSessionExportData(id: sessionId) {
+                    sessionDataList.append(data)
+                }
+            }
+            
             // Add batch summary
-            let batchSummary = createBatchSummary(sessions: sessions)
+            let batchSummary = createBatchSummary(sessions: sessionDataList)
             items.append(batchSummary)
             
             await presentShareSheet(items: items)
-            lastShareResult = .success("\(sessions.count) sessions shared successfully")
+            lastShareResult = .success("\(sessionIds.count) sessions shared successfully")
             
         } catch {
             logger.error("Failed to share sessions: \(error.localizedDescription)")
@@ -99,21 +112,26 @@ class ShareManager: ObservableObject {
     
     /// Shares session as GPX with activity metadata
     func shareSessionAsActivity(
-        _ session: RuckSession,
+        sessionId: UUID,
         dataCoordinator: DataCoordinator,
         includePhotos: Bool = false
     ) async {
         do {
-            let gpxURL = try await dataCoordinator.exportSessionToGPX(session)
+            let gpxURL = try await dataCoordinator.exportSessionToGPX(sessionId: sessionId)
+            
+            // Get session data for descriptions
+            guard let sessionData = try await dataCoordinator.getSessionExportData(id: sessionId) else {
+                throw ShareError.exportFailed(ExportManager.ExportError.sessionNotFound)
+            }
             
             var items: [Any] = [gpxURL]
             
             // Add rich activity description
-            let activityDescription = createActivityDescription(session)
+            let activityDescription = createActivityDescription(sessionData)
             items.append(activityDescription)
             
             // Add session statistics as formatted text
-            let statistics = createDetailedStatistics(session)
+            let statistics = createDetailedStatistics(sessionData)
             items.append(statistics)
             
             // TODO: Add photos if requested (future feature)
@@ -132,20 +150,25 @@ class ShareManager: ObservableObject {
     
     /// Shares session data for analysis (CSV format with metadata)
     func shareSessionForAnalysis(
-        _ session: RuckSession,
+        sessionId: UUID,
         dataCoordinator: DataCoordinator
     ) async {
         do {
-            let csvURL = try await dataCoordinator.exportSessionToCSV(session)
+            let csvURL = try await dataCoordinator.exportSessionToCSV(sessionId: sessionId)
+            
+            // Get session data for analysis summary
+            guard let sessionData = try await dataCoordinator.getSessionExportData(id: sessionId) else {
+                throw ShareError.exportFailed(ExportManager.ExportError.sessionNotFound)
+            }
             
             var items: [Any] = [csvURL]
             
             // Add analysis summary
-            let analysisSummary = createAnalysisSummary(session)
+            let analysisSummary = createAnalysisSummary(sessionData)
             items.append(analysisSummary)
             
             // Add technical details
-            let technicalDetails = createTechnicalDetails(session)
+            let technicalDetails = createTechnicalDetails(sessionData)
             items.append(technicalDetails)
             
             await presentShareSheet(items: items)
@@ -188,31 +211,36 @@ class ShareManager: ObservableObject {
         isPresenting = true
     }
     
-    private func createSessionSummary(_ session: RuckSession) -> String {
+    private func createSessionSummary(_ sessionData: SessionExportData) -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         
-        let distance = String(format: "%.2f", session.totalDistance / 1000)
-        let duration = formatDuration(session.duration)
-        let weight = String(format: "%.1f", session.loadWeight)
+        let distance = String(format: "%.2f", sessionData.totalDistance / 1000)
+        let duration = sessionData.endDate != nil ? formatDuration(sessionData.endDate!.timeIntervalSince(sessionData.startDate)) : "In Progress"
+        let weight = String(format: "%.1f", sessionData.loadWeight)
         
         return """
         🎒 Ruck March Summary
-        📅 Date: \(formatter.string(from: session.startDate))
+        📅 Date: \(formatter.string(from: sessionData.startDate))
         📏 Distance: \(distance) km
         ⏱️ Duration: \(duration)
         🎒 Load Weight: \(weight) kg
-        🔥 Calories: \(Int(session.totalCalories))
-        ⛰️ Elevation Gain: \(String(format: "%.0f", session.elevationGain)) m
+        🔥 Calories: \(Int(sessionData.totalCalories))
+        ⛰️ Elevation Gain: \(String(format: "%.0f", sessionData.elevationGain)) m
         
         Shared from RuckMap 📍
         """
     }
     
-    private func createBatchSummary(sessions: [RuckSession]) -> String {
+    private func createBatchSummary(sessions: [SessionExportData]) -> String {
         let totalDistance = sessions.reduce(0) { $0 + $1.totalDistance }
-        let totalDuration = sessions.reduce(0) { $0 + $1.duration }
+        let totalDuration = sessions.reduce(0.0) { total, session in
+            if let endDate = session.endDate {
+                return total + endDate.timeIntervalSince(session.startDate)
+            }
+            return total
+        }
         let totalCalories = sessions.reduce(0) { $0 + $1.totalCalories }
         let totalElevationGain = sessions.reduce(0) { $0 + $1.elevationGain }
         
@@ -231,67 +259,67 @@ class ShareManager: ObservableObject {
         """
     }
     
-    private func createActivityDescription(_ session: RuckSession) -> String {
+    private func createActivityDescription(_ sessionData: SessionExportData) -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = .full
         formatter.timeStyle = .short
         
-        let distance = String(format: "%.2f", session.totalDistance / 1000)
-        let avgPace = formatPace(session.averagePace)
-        let weight = String(format: "%.1f", session.loadWeight)
+        let distance = String(format: "%.2f", sessionData.totalDistance / 1000)
+        let avgPace = formatPaceMinPerKm(sessionData.averagePace)
+        let weight = String(format: "%.1f", sessionData.loadWeight)
+        let duration = sessionData.endDate != nil ? formatDuration(sessionData.endDate!.timeIntervalSince(sessionData.startDate)) : "In Progress"
         
         return """
         🎒 Ruck March Activity
         
         Completed a challenging ruck march carrying \(weight) kg over \(distance) km.
         
-        📅 \(formatter.string(from: session.startDate))
-        ⏱️ Duration: \(formatDuration(session.duration))
+        📅 \(formatter.string(from: sessionData.startDate))
+        ⏱️ Duration: \(duration)
         🏃‍♂️ Average Pace: \(avgPace)
-        🔥 Calories Burned: \(Int(session.totalCalories))
-        ⛰️ Elevation Gain: \(String(format: "%.0f", session.elevationGain)) m
-        📊 Average Grade: \(String(format: "%.1f", session.averageGrade))%
+        🔥 Calories Burned: \(Int(sessionData.totalCalories))
+        ⛰️ Elevation Gain: \(String(format: "%.0f", sessionData.elevationGain)) m
         
         #RuckMarch #Fitness #Endurance #Military #Training
         """
     }
     
-    private func createDetailedStatistics(_ session: RuckSession) -> String {
+    private func createDetailedStatistics(_ sessionData: SessionExportData) -> String {
         return """
         📊 Detailed Statistics
         
         Distance Metrics:
-        • Total Distance: \(String(format: "%.3f", session.totalDistance / 1000)) km
-        • GPS Points: \(session.locationPoints.count)
+        • Total Distance: \(String(format: "%.3f", sessionData.totalDistance / 1000)) km
+        • GPS Points: \(sessionData.locationPointsCount)
         
         Elevation Profile:
-        • Gain: \(String(format: "%.1f", session.elevationGain)) m
-        • Loss: \(String(format: "%.1f", session.elevationLoss)) m
-        • Max: \(String(format: "%.1f", session.maxElevation)) m
-        • Min: \(String(format: "%.1f", session.minElevation)) m
-        • Range: \(String(format: "%.1f", session.elevationRange)) m
+        • Gain: \(String(format: "%.1f", sessionData.elevationGain)) m
+        • Loss: \(String(format: "%.1f", sessionData.elevationLoss)) m
+        • Max: \(String(format: "%.1f", sessionData.maxElevation)) m
+        • Min: \(String(format: "%.1f", sessionData.minElevation)) m
+        • Range: \(String(format: "%.1f", sessionData.elevationRange)) m
         
         Grade Analysis:
-        • Average: \(String(format: "%.2f", session.averageGrade))%
-        • Maximum: \(String(format: "%.2f", session.maxGrade))%
-        • Minimum: \(String(format: "%.2f", session.minGrade))%
+        • Average: \(String(format: "%.2f", sessionData.averageGrade))%
+        • Maximum: \(String(format: "%.2f", sessionData.maxGrade))%
+        • Minimum: \(String(format: "%.2f", sessionData.minGrade))%
         
         Performance:
-        • Average Pace: \(formatPace(session.averagePace))
-        • Calories: \(Int(session.totalCalories))
-        • Load Weight: \(String(format: "%.1f", session.loadWeight)) kg
+        • Average Pace: \(formatPaceMinPerKm(sessionData.averagePace))
+        • Calories: \(Int(sessionData.totalCalories))
+        • Load Weight: \(String(format: "%.1f", sessionData.loadWeight)) kg
         """
     }
     
-    private func createAnalysisSummary(_ session: RuckSession) -> String {
+    private func createAnalysisSummary(_ sessionData: SessionExportData) -> String {
         return """
-        🔬 Analysis Summary for Session \(session.id.uuidString.prefix(8))
+        🔬 Analysis Summary for Session \(sessionData.id.uuidString.prefix(8))
         
         Data Quality:
-        • Location Points: \(session.locationPoints.count)
-        • Elevation Accuracy: \(String(format: "%.1f", session.elevationAccuracy)) m
-        • Barometer Data: \(session.barometerDataPoints) points
-        • High Quality Data: \(session.hasHighQualityElevationData ? "Yes" : "No")
+        • Location Points: \(sessionData.locationPointsCount)
+        • Elevation Accuracy: \(String(format: "%.1f", sessionData.elevationAccuracy)) m
+        • Barometer Data: \(sessionData.barometerDataPoints) points
+        • High Quality Data: \(sessionData.hasHighQualityElevationData ? "Yes" : "No")
         
         Export Information:
         • Format: CSV (Comma-Separated Values)
@@ -307,15 +335,15 @@ class ShareManager: ObservableObject {
         """
     }
     
-    private func createTechnicalDetails(_ session: RuckSession) -> String {
+    private func createTechnicalDetails(_ sessionData: SessionExportData) -> String {
         return """
         🔧 Technical Details
         
         Session Metadata:
-        • ID: \(session.id.uuidString)
-        • Version: \(session.version)
-        • Created: \(DateFormatter.iso8601.string(from: session.createdAt))
-        • Modified: \(DateFormatter.iso8601.string(from: session.modifiedAt))
+        • ID: \(sessionData.id.uuidString)
+        • Version: \(sessionData.version)
+        • Created: \(DateFormatter.iso8601.string(from: sessionData.createdAt))
+        • Modified: \(DateFormatter.iso8601.string(from: sessionData.modifiedAt))
         
         Data Processing:
         • Elevation Fusion: Enhanced GPS + Barometer
@@ -329,15 +357,16 @@ class ShareManager: ObservableObject {
         """
     }
     
-    private func createFileMetadata(url: URL, session: RuckSession) -> [String: Any]? {
+    private func createFileMetadata(url: URL, sessionData: SessionExportData) -> [String: Any]? {
         // Create metadata dictionary for the file
+        let duration = sessionData.endDate != nil ? sessionData.endDate!.timeIntervalSince(sessionData.startDate) : 0
         return [
-            "title": "Ruck Session - \(DateFormatter.shortDate.string(from: session.startDate))",
+            "title": "Ruck Session - \(DateFormatter.shortDate.string(from: sessionData.startDate))",
             "description": "GPS track and elevation data from ruck march",
-            "distance": session.totalDistance,
-            "duration": session.duration,
-            "elevationGain": session.elevationGain,
-            "loadWeight": session.loadWeight,
+            "distance": sessionData.totalDistance,
+            "duration": duration,
+            "elevationGain": sessionData.elevationGain,
+            "loadWeight": sessionData.loadWeight,
             "fileFormat": url.pathExtension.uppercased(),
             "app": "RuckMap"
         ]
@@ -355,11 +384,11 @@ class ShareManager: ObservableObject {
         }
     }
     
-    private func formatPace(_ paceInSeconds: Double) -> String {
-        guard paceInSeconds > 0 else { return "N/A" }
+    private func formatPaceMinPerKm(_ paceMinPerKm: Double) -> String {
+        guard paceMinPerKm > 0 else { return "N/A" }
         
-        let minutes = Int(paceInSeconds) / 60
-        let seconds = Int(paceInSeconds) % 60
+        let minutes = Int(paceMinPerKm)
+        let seconds = Int((paceMinPerKm - Double(minutes)) * 60)
         return String(format: "%d:%02d /km", minutes, seconds)
     }
 }
