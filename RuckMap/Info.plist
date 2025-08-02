@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>processing</string>
+	</array>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>RuckMap needs location access to track your ruck route, calculate distance and pace, and provide accurate calorie burn based on terrain. Location tracking continues in the background to ensure complete session recording.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>RuckMap needs location access to track your ruck route, calculate distance and pace, and provide accurate calorie burn based on terrain.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>RuckMap needs background location access to track your complete ruck session even when the app is in the background.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>RuckMap reads your heart rate and body metrics from Health to provide more accurate calorie calculations during your rucks.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>RuckMap saves your ruck workouts to Health to contribute to your activity rings and maintain a complete fitness record.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>RuckMap uses motion data to detect terrain type and improve calorie calculations based on your movement patterns.</string>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchScreenBackground</string>
+		<key>UIImageName</key>
+		<string>LaunchScreenIcon</string>
+	</dict>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>Default Configuration</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>
