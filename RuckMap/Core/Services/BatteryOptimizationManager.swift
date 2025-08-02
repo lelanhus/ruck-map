@@ -232,7 +232,9 @@ final class BatteryOptimizationManager {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.updateOptimizations()
+            Task { @MainActor in
+                self?.updateOptimizations()
+            }
         }
         
         NotificationCenter.default.addObserver(
@@ -240,7 +242,9 @@ final class BatteryOptimizationManager {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.updateOptimizations()
+            Task { @MainActor in
+                self?.updateOptimizations()
+            }
         }
     }
     
