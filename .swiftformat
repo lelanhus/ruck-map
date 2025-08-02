@@ -92,7 +92,7 @@
 
 # Disabled Rules
 --disable andOperator
---disable isEmpty
+--enable isEmpty
 
 # Excluded paths
 --exclude .build
