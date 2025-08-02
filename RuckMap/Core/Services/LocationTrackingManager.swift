@@ -5,7 +5,7 @@ import SwiftData
 import Observation
 
 // MARK: - Tracking State
-enum TrackingState: String, CaseIterable {
+enum TrackingState: String, CaseIterable, Sendable {
     case stopped
     case tracking
     case paused
@@ -16,7 +16,7 @@ enum TrackingState: String, CaseIterable {
 }
 
 // MARK: - GPS Accuracy
-enum GPSAccuracy: String, CaseIterable {
+enum GPSAccuracy: String, CaseIterable, Sendable {
     case poor
     case fair 
     case good
