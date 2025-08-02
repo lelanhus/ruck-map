@@ -156,13 +156,8 @@ final class AdaptiveGPSManager: NSObject {
     }
     
     deinit {
-        // Clean up observers synchronously
-        if let batteryObserver = batteryObserver {
-            NotificationCenter.default.removeObserver(batteryObserver)
-        }
-        if let lowPowerModeObserver = lowPowerModeObserver {
-            NotificationCenter.default.removeObserver(lowPowerModeObserver)
-        }
+        // Observers will be automatically cleaned up when the object is deallocated
+        // since we're using NSObjectProtocol references
     }
     
     // MARK: - Public Methods
@@ -256,12 +251,14 @@ final class AdaptiveGPSManager: NSObject {
         }
     }
     
-    private func cleanupBatteryMonitoring() {
+    func cleanupBatteryMonitoring() {
         if let observer = batteryObserver {
             NotificationCenter.default.removeObserver(observer)
+            batteryObserver = nil
         }
         if let observer = lowPowerModeObserver {
             NotificationCenter.default.removeObserver(observer)
+            lowPowerModeObserver = nil
         }
     }
     

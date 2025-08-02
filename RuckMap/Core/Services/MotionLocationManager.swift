@@ -366,7 +366,7 @@ final class MotionLocationManager: NSObject {
     deinit {
         // Stop motion updates synchronously
         motionManager.stopDeviceMotionUpdates()
-        motionActivityManager.stopActivityUpdates()
+        activityManager.stopActivityUpdates()
     }
     
     // MARK: - Setup Methods
