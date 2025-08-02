@@ -88,6 +88,9 @@ final class LocationTrackingManager: NSObject {
     // Calorie calculation
     private(set) var calorieCalculator: CalorieCalculator
     
+    // Terrain detection
+    private(set) var terrainDetectionManager: TerrainDetectionManager
+    
     // MARK: - Private Properties
     private let locationManager = CLLocationManager()
     private var modelContext: ModelContext?
@@ -111,6 +114,7 @@ final class LocationTrackingManager: NSObject {
         self.elevationManager = ElevationManager()
         self.batteryOptimizationManager = BatteryOptimizationManager()
         self.calorieCalculator = CalorieCalculator()
+        self.terrainDetectionManager = TerrainDetectionManager()
         
         super.init()
         setupLocationManager()
@@ -197,6 +201,12 @@ final class LocationTrackingManager: NSObject {
         // Start elevation tracking
         elevationManager.startTracking()
         
+        // Start terrain detection with calorie calculator integration
+        terrainDetectionManager.startDetection()
+        
+        // Handle terrain detection failures gracefully
+        setupTerrainDetectionErrorHandling()
+        
         // Start calorie calculation if session has load weight
         if session.loadWeight > 0 {
             startCalorieTracking(bodyWeight: 70.0, loadWeight: session.loadWeight) // TODO: Get actual body weight from user profile
@@ -213,6 +223,7 @@ final class LocationTrackingManager: NSObject {
         locationManager.stopUpdatingLocation()
         motionLocationManager.stopMotionTracking()
         elevationManager.stopTracking()
+        terrainDetectionManager.stopDetection()
         calorieCalculator.stopContinuousCalculation()
         stopAutoPauseMonitoring()
     }
@@ -224,11 +235,15 @@ final class LocationTrackingManager: NSObject {
         locationManager.startUpdatingLocation()
         motionLocationManager.startMotionTracking()
         elevationManager.startTracking()
+        terrainDetectionManager.startDetection()
         
         // Resume calorie calculation if session has load weight
         if let session = currentSession, session.loadWeight > 0 {
             startCalorieTracking(bodyWeight: 70.0, loadWeight: session.loadWeight) // TODO: Get actual body weight from user profile
         }
+        
+        // Restart terrain factor monitoring
+        startTerrainFactorMonitoring()
         
         startAutoPauseMonitoring()
     }
@@ -244,6 +259,9 @@ final class LocationTrackingManager: NSObject {
         
         // Stop elevation tracking
         elevationManager.stopTracking()
+        
+        // Stop terrain detection
+        terrainDetectionManager.stopDetection()
         
         // Stop calorie calculation
         calorieCalculator.stopContinuousCalculation()
@@ -285,6 +303,7 @@ final class LocationTrackingManager: NSObject {
         // Reset motion location manager state
         // motionLocationManager doesn't have resetMetrics, but state resets automatically
         elevationManager.reset()
+        terrainDetectionManager.reset()
     }
     
     func togglePause() {
@@ -393,6 +412,9 @@ final class LocationTrackingManager: NSObject {
         // Process elevation data
         let elevationData = await elevationManager.processLocationUpdate(filteredLocation)
         
+        // Perform terrain detection
+        let terrainResult = await terrainDetectionManager.detectTerrain(at: filteredLocation)
+        
         // Update current location
         currentLocation = filteredLocation
         
@@ -419,6 +441,9 @@ final class LocationTrackingManager: NSObject {
                     session.elevationGain = elevationManager.elevationGain
                     session.elevationLoss = elevationManager.elevationLoss
                     session.currentGrade = elevationData.grade ?? 0
+                    
+                    // Update terrain segments if terrain has changed significantly
+                    updateTerrainSegments(terrainResult: terrainResult, session: session, location: filteredLocation)
                 }
                 
                 // Calculate pace
@@ -565,7 +590,7 @@ final class LocationTrackingManager: NSObject {
         return batteryOptimizationManager.getOptimizationReport()
     }
     
-    /// Start calorie tracking with body and load weight
+    /// Start calorie tracking with body and load weight using enhanced terrain integration
     private func startCalorieTracking(bodyWeight: Double, loadWeight: Double) {
         calorieCalculator.startContinuousCalculation(
             bodyWeight: bodyWeight,
@@ -578,8 +603,8 @@ final class LocationTrackingManager: NSObject {
                 let location = self.currentLocation
                 let grade = self.elevationManager.currentGrade
                 
-                // Determine terrain type from current session's terrain segments
-                let terrain = self.getCurrentTerrain()
+                // Get terrain type from terrain detection manager
+                let terrain = self.terrainDetectionManager.getCurrentTerrainType()
                 
                 return (location: location, grade: grade, terrain: terrain)
             },
@@ -588,22 +613,94 @@ final class LocationTrackingManager: NSObject {
                     return nil
                 }
                 return WeatherData(from: conditions)
+            },
+            terrainFactorProvider: { @MainActor [weak self] in
+                guard let self = self else { return 1.2 }
+                
+                // Get real-time terrain factor with grade compensation
+                let grade = self.elevationManager.currentGrade
+                return await self.terrainDetectionManager.getEnhancedTerrainFactor(grade: grade)
             }
         )
+        
+        // Start terrain factor monitoring for real-time updates
+        startTerrainFactorMonitoring()
     }
     
-    /// Get current terrain type based on session terrain segments
-    private func getCurrentTerrain() -> TerrainType? {
-        guard let session = currentSession else { return nil }
-        
+    /// Starts monitoring terrain factor changes for real-time calorie updates
+    private func startTerrainFactorMonitoring() {
+        Task {
+            for await (factor, confidence, terrainType) in terrainDetectionManager.terrainFactorStream() {
+                // Update calorie calculator with new terrain factor
+                await calorieCalculator.updateTerrainFactor(factor)
+                
+                // Log significant terrain changes
+                if confidence > 0.8 {
+                    print("High-confidence terrain detected: \(terrainType.displayName) (factor: \(String(format: "%.2f", factor)))")
+                }
+            }
+        }
+    }
+    
+    /// Update terrain segments based on automatic detection
+    private func updateTerrainSegments(
+        terrainResult: TerrainDetectionResult,
+        session: RuckSession,
+        location: CLLocation
+    ) {
         let now = Date()
         
-        // Find the most recent terrain segment that contains the current time
-        let currentTerrain = session.terrainSegments
-            .filter { $0.startTime <= now && $0.endTime >= now }
-            .max(by: { $0.startTime < $1.startTime })
+        // Check if we need to create a new terrain segment
+        let shouldCreateNewSegment: Bool = {
+            // Always create if no segments exist
+            guard let lastSegment = session.terrainSegments.last else { return true }
+            
+            // Create new segment if terrain type has changed and confidence is high enough
+            if lastSegment.terrainType != terrainResult.terrainType && 
+               terrainResult.confidence > 0.7 && 
+               !terrainResult.isManualOverride {
+                return true
+            }
+            
+            // Create new segment if it's a manual override
+            if terrainResult.isManualOverride {
+                return true
+            }
+            
+            // Create new segment if last segment is more than 5 minutes old
+            let segmentAge = now.timeIntervalSince(lastSegment.startTime)
+            if segmentAge > 300 { // 5 minutes
+                return true
+            }
+            
+            return false
+        }()
         
-        return currentTerrain?.terrainType ?? .trail // Default to trail if no specific terrain set
+        if shouldCreateNewSegment {
+            // End the previous segment if it exists
+            if let lastSegment = session.terrainSegments.last,
+               lastSegment.endTime > now {
+                lastSegment.endTime = now
+            }
+            
+            // Create new terrain segment
+            let newSegment = terrainDetectionManager.createTerrainSegment(
+                startTime: now,
+                endTime: Date.distantFuture, // Will be updated when terrain changes
+                grade: elevationManager.currentGrade
+            )
+            
+            session.terrainSegments.append(newSegment)
+        } else if let lastSegment = session.terrainSegments.last {
+            // Update existing segment with current grade
+            lastSegment.grade = elevationManager.currentGrade
+            lastSegment.confidence = terrainResult.confidence
+        }
+    }
+    
+    /// Get current terrain type - now uses terrain detection manager
+    private func getCurrentTerrain() -> TerrainType? {
+        return terrainDetectionManager.getCurrentTerrainType()
     }
     
     /// Enable or disable auto-optimization
@@ -634,6 +731,79 @@ final class LocationTrackingManager: NSObject {
     /// Reset calorie calculation (useful for new sessions)
     func resetCalorieCalculation() {
         calorieCalculator.reset()
+    }
+    
+    // MARK: - Terrain Detection API
+    
+    /// Get current detected terrain type
+    var currentDetectedTerrain: TerrainType {
+        terrainDetectionManager.getCurrentTerrainType()
+    }
+    
+    /// Get current terrain detection confidence
+    var terrainDetectionConfidence: Double {
+        terrainDetectionManager.currentTerrain?.confidence ?? 0.0
+    }
+    
+    /// Get current terrain factor for calorie calculations
+    var currentTerrainFactor: Double {
+        terrainDetectionManager.getCurrentTerrainFactor()
+    }
+    
+    /// Get terrain factor impact percentage on calorie burn
+    var terrainFactorImpactPercent: Double {
+        calorieCalculator.terrainFactorImpact
+    }
+    
+    /// Check if terrain detection error handling is needed
+    private func setupTerrainDetectionErrorHandling() {
+        Task {
+            // Monitor for terrain detection failures and handle gracefully
+            while trackingState == .tracking {
+                do {
+                    // Check if terrain detection is functioning
+                    let confidence = terrainDetectionConfidence
+                    
+                    if confidence < 0.3 {
+                        // Low confidence detected, handle gracefully
+                        await terrainDetectionManager.handleDetectionFailure(
+                            TerrainDetectionError.lowConfidence(confidence)
+                        )
+                    }
+                    
+                    try await Task.sleep(for: .seconds(30))
+                } catch {
+                    await terrainDetectionManager.handleDetectionFailure(error)
+                    try? await Task.sleep(for: .seconds(10))
+                }
+            }
+        }
+    }
+    
+    /// Check if terrain detection has high confidence
+    var hasHighConfidenceTerrainDetection: Bool {
+        terrainDetectionManager.hasHighConfidenceDetection()
+    }
+    
+    /// Manually override terrain type
+    func setManualTerrainOverride(_ terrainType: TerrainType?) {
+        terrainDetectionManager.setManualOverride(terrainType)
+    }
+    
+    /// Clear manual terrain override
+    func clearTerrainOverride() {
+        terrainDetectionManager.clearManualOverride()
+    }
+    
+    /// Check if manual terrain override is active
+    var isTerrainOverrideActive: Bool {
+        terrainDetectionManager.isManualOverrideActive
+    }
+    
+    /// Get terrain change log for current session
+    func getTerrainChangeLog() -> [TerrainDetectionResult] {
+        guard let session = currentSession else { return [] }
+        return terrainDetectionManager.getTerrainChangeLog(since: session.startDate)
     }
     
     /// Get debug information
@@ -680,8 +850,13 @@ final class LocationTrackingManager: NSObject {
         === Calorie Calculation ===
         Current Rate: \(String(format: "%.2f", calorieCalculator.currentMetabolicRate)) kcal/min
         Total Calories: \(String(format: "%.1f", calorieCalculator.totalCalories)) kcal
+        Current Terrain Factor: \(String(format: "%.2f", calorieCalculator.currentTerrainFactor))
+        Terrain Impact: +\(String(format: "%.0f", terrainFactorImpactPercent))%
         Calculating: \(calorieCalculator.isCalculating ? "Yes" : "No")
         History Points: \(calorieCalculator.getCalculationHistory().count)
+        
+        === Terrain Detection ===
+        \(terrainDetectionManager.getDebugInfo())
         """
     }
 }

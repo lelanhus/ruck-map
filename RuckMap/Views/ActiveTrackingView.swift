@@ -350,6 +350,12 @@ struct ActiveTrackingView: View {
             .background(Color(.systemGray6))
         }
         .navigationBarHidden(true)
+        .overlay(alignment: .topTrailing) {
+            // Terrain override overlay
+            if locationManager.trackingState == .tracking {
+                TerrainOverlayCompat(locationManager: locationManager)
+            }
+        }
         .alert("End Ruck?", isPresented: $showEndConfirmation) {
             Button("Cancel", role: .cancel) { }
             Button("End", role: .destructive) {
