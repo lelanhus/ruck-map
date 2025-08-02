@@ -1,8 +1,38 @@
 # Xcode
-*.xcuserstate
-*.xcworkspace/xcuserdata/
+#
+# gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore
+
+## User settings
+xcuserdata/
+
+## compatibility with Xcode 8 and earlier (ignoring not required starting Xcode 9)
+*.xcscmblueprint
+*.xccheckout
+
+## compatibility with Xcode 3 and earlier (ignoring not required starting Xcode 4)
+build/
 DerivedData/
-*.xcodeproj/xcuserdata/
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+
+## Obj-C/Swift specific
+*.hmap
+
+## App packaging
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+## Playgrounds
+timeline.xctimeline
+playground.xcworkspace
 
 # Swift Package Manager
 .build/
@@ -14,17 +44,48 @@ Pods/
 # Carthage (if used)
 Carthage/Build/
 
+# Accio dependency management
+Dependencies/
+.accio/
+
 # fastlane
 fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
 
-# Code coverage
-*.xcresult
+# Code Injection
+iOSInjectionProject/
 
 # macOS
 .DS_Store
+
+# Xcode project files (since we're using xcodegen)
+*.xcodeproj
+*.xcworkspace
+
+# SwiftLint
+.swiftlint.yml.lock
+
+# Environment files
+.env
+.env.local
+
+# Temporary files
+*.tmp
+*.temp
+
+# Build artifacts
+Archives/
+Products/
+
+# Code coverage
+*.lcov
+*.xcresult
+coverage/
+
+# Documentation
+docs/generated/
 
 # Claude
 .claude/
