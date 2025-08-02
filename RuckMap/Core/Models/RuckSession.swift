@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 @Model
-final class RuckSession {
+final class RuckSession: Sendable {
     var id: UUID
     var startDate: Date
     var endDate: Date?

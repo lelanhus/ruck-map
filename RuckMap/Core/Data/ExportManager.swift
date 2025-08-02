@@ -7,7 +7,7 @@ import OSLog
 actor ExportManager {
     private let logger = Logger(subsystem: "com.ruckmap.app", category: "ExportManager")
     
-    enum ExportFormat {
+    enum ExportFormat: String, CaseIterable {
         case gpx
         case csv
         case json

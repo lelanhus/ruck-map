@@ -11,8 +11,12 @@ actor SessionManager {
     private var backgroundTask: Task<Void, Never>?
     
     init(modelContainer: ModelContainer) {
-        self.modelExecutor = DefaultModelExecutor(modelContainer: modelContainer)
-        startBackgroundTasks()
+        let modelContext = ModelContext(modelContainer)
+        self.modelExecutor = DefaultModelExecutor(modelContext: modelContext)
+        
+        Task {
+            await startBackgroundTasks()
+        }
     }
     
     deinit {
@@ -54,7 +58,7 @@ actor SessionManager {
     
     /// Fetches all sessions sorted by start date
     func fetchAllSessions(limit: Int = 100) async throws -> [RuckSession] {
-        let descriptor = FetchDescriptor<RuckSession>(
+        var descriptor = FetchDescriptor<RuckSession>(
             sortBy: [SortDescriptor(\.startDate, order: .reverse)]
         )
         descriptor.fetchLimit = limit

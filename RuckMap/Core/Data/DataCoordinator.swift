@@ -2,6 +2,7 @@ import Foundation
 import SwiftData
 import SwiftUI
 import OSLog
+import CoreLocation
 
 /// Central coordinator for all data operations in RuckMap
 @MainActor
@@ -135,7 +136,7 @@ class DataCoordinator: ObservableObject {
     // MARK: - Location Tracking
     
     /// Adds a location point to the active session
-    func addLocationPoint(to session: RuckSession, from location: CoreLocation.CLLocation) async throws {
+    func addLocationPoint(to session: RuckSession, from location: CLLocation) async throws {
         try await sessionManager.addLocationPoint(to: session, from: location)
     }
     
@@ -277,7 +278,7 @@ class DataCoordinator: ObservableObject {
     }
     
     /// Performs comprehensive data validation
-    func performDataValidation() async throws -> MigrationManager.ValidationReport {
+    func performDataValidation() async throws -> ValidationReport {
         return try await migrationManager.validateDataIntegrity(modelContainer: modelContainer)
     }
     
@@ -340,11 +341,3 @@ struct SessionListView: View {
     }
 }
 
-/// Placeholder for session detail view
-struct SessionDetailView: View {
-    let session: RuckSession
-    
-    var body: some View {
-        Text("Session Detail View for \(session.id)")
-    }
-}

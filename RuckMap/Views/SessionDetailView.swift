@@ -87,14 +87,14 @@ struct SessionDetailView: View {
     private var metricsSection: some View {
         VStack(spacing: 12) {
             HStack(spacing: 12) {
-                MetricCard(
+                SessionMetricCard(
                     title: "Avg Pace",
                     value: formatPace(session.averagePace),
                     icon: "speedometer",
                     color: .blue
                 )
                 
-                MetricCard(
+                SessionMetricCard(
                     title: "Elevation Gain",
                     value: "\(Int(session.elevationGain))m",
                     icon: "arrow.up.forward",
@@ -103,14 +103,14 @@ struct SessionDetailView: View {
             }
             
             HStack(spacing: 12) {
-                MetricCard(
+                SessionMetricCard(
                     title: "Avg Grade",
                     value: String(format: "%.1f%%", session.averageGrade),
                     icon: "chart.line.uptrend.xyaxis",
                     color: .orange
                 )
                 
-                MetricCard(
+                SessionMetricCard(
                     title: "Points",
                     value: "\(session.locationPoints.count)",
                     icon: "mappin.and.ellipse",
@@ -272,14 +272,16 @@ struct SessionDetailView: View {
             do {
                 let exportManager = ExportManager()
                 
+                let result: ExportManager.ExportResult
                 switch format {
                 case .gpx:
-                    exportURL = try await exportManager.exportToGPX(session: session)
+                    result = try await exportManager.exportToGPX(session: session)
                 case .csv:
-                    exportURL = try await exportManager.exportToCSV(session: session)
+                    result = try await exportManager.exportToCSV(session: session)
                 case .json:
-                    exportURL = try await exportManager.exportToJSON(session: session)
+                    result = try await exportManager.exportToJSON(session: session)
                 }
+                exportURL = result.url
                 
                 showingShareSheet = true
             } catch {
@@ -294,7 +296,7 @@ struct SessionDetailView: View {
         Task {
             do {
                 let shareManager = ShareManager()
-                shareManager.shareSession(session, from: UIApplication.shared.windows.first?.rootViewController)
+                await shareManager.shareSession(session, format: .gpx, dataCoordinator: dataCoordinator)
             } catch {
                 exportError = error
             }
@@ -304,7 +306,7 @@ struct SessionDetailView: View {
 
 // MARK: - Supporting Views
 
-private struct MetricCard: View {
+private struct SessionMetricCard: View {
     let title: String
     let value: String
     let icon: String

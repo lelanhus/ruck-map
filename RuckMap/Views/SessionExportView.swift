@@ -243,7 +243,7 @@ struct ExportActionsSection: View {
                     Task {
                         await ShareManager().shareSessionAsActivity(
                             session,
-                            dataCoordinator: DataCoordinator()
+                            dataCoordinator: try DataCoordinator()
                         )
                     }
                 }
@@ -254,7 +254,7 @@ struct ExportActionsSection: View {
                     Task {
                         await ShareManager().shareSessionForAnalysis(
                             session,
-                            dataCoordinator: DataCoordinator()
+                            dataCoordinator: try DataCoordinator()
                         )
                     }
                 }

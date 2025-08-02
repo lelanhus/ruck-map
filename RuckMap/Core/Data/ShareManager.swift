@@ -42,7 +42,7 @@ class ShareManager: ObservableObject {
         dataCoordinator: DataCoordinator
     ) async {
         do {
-            logger.info("Starting share for session \(session.id) in \(format) format")
+            logger.info("Starting share for session \(session.id) in \(format.rawValue) format")
             
             let url = try await dataCoordinator.exportSession(session, format: format)
             
@@ -74,7 +74,7 @@ class ShareManager: ObservableObject {
         dataCoordinator: DataCoordinator
     ) async {
         do {
-            logger.info("Starting batch share for \(sessions.count) sessions in \(format) format")
+            logger.info("Starting batch share for \(sessions.count) sessions in \(format.rawValue) format")
             
             let urls = try await dataCoordinator.exportSessions(sessions, format: format)
             
@@ -367,7 +367,7 @@ class ShareManager: ObservableObject {
 // MARK: - SwiftUI Integration
 
 /// SwiftUI view modifier for presenting share sheets
-struct ShareSheet: UIViewControllerRepresentable {
+struct ShareSheetView: UIViewControllerRepresentable {
     let items: [Any]
     let onComplete: (ShareManager.ShareResult) -> Void
     
@@ -403,7 +403,7 @@ extension View {
         onComplete: @escaping (ShareManager.ShareResult) -> Void = { _ in }
     ) -> some View {
         self.sheet(isPresented: isPresented) {
-            ShareSheet(items: items, onComplete: onComplete)
+            ShareSheetView(items: items, onComplete: onComplete)
         }
     }
 }
