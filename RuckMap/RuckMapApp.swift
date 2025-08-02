@@ -3,32 +3,24 @@ import SwiftData
 
 @main
 struct RuckMapApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            RuckSession.self,
-            LocationPoint.self,
-            TerrainSegment.self,
-            WeatherConditions.self
-        ])
-        
-        let modelConfiguration = ModelConfiguration(
-            schema: schema,
-            url: URL.documentsDirectory.appending(path: "RuckMap.store"),
-            cloudKitDatabase: .automatic
-        )
-
+    @StateObject private var dataCoordinator: DataCoordinator
+    
+    init() {
         do {
-            let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
-            return container
+            _dataCoordinator = StateObject(wrappedValue: try DataCoordinator())
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            fatalError("Failed to initialize DataCoordinator: \(error)")
         }
-    }()
+    }
 
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(dataCoordinator)
+                .modelContainer(dataCoordinator.modelContainer)
+                .task {
+                    await dataCoordinator.initialize()
+                }
         }
-        .modelContainer(sharedModelContainer)
     }
 }

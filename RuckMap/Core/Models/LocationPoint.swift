@@ -21,6 +21,11 @@ final class LocationPoint {
     var heartRate: Double? // bpm from HealthKit
     var isKeyPoint: Bool // For Douglas-Peucker compression
     
+    // GPS Compression tracking properties
+    var compressionIndex: Int? // Original index before compression
+    var compressionError: Double? // Distance error from compression in meters
+    var compressedTimestamp: Date? // When the point was compressed
+    
     @Relationship(inverse: \RuckSession.locationPoints)
     var session: RuckSession?
     
@@ -139,5 +144,10 @@ final class LocationPoint {
         
         let grade = (elevationChange / horizontalDistance) * 100.0
         return max(-20.0, min(20.0, grade)) // Clamp to ±20%
+    }
+    
+    /// Returns true if this point was part of GPS compression
+    func wasCompressed() -> Bool {
+        return compressionIndex != nil || compressionError != nil || compressedTimestamp != nil
     }
 }
