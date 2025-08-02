@@ -364,9 +364,8 @@ final class MotionLocationManager: NSObject {
     }
     
     deinit {
-        // Stop motion updates synchronously
-        motionManager.stopDeviceMotionUpdates()
-        activityManager.stopActivityUpdates()
+        // Motion updates will be stopped when stopMotionTracking is called
+        // CoreMotion managers will clean up automatically
     }
     
     // MARK: - Setup Methods
