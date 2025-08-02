@@ -88,4 +88,4 @@ coverage/
 docs/generated/
 
 # Claude
-.claude/
+# .claude/ # Team-shared commands are tracked
