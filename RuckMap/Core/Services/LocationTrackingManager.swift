@@ -70,6 +70,9 @@ final class LocationTrackingManager: NSObject {
     var isAutoPaused: Bool = false
     var lastMovementTime: Date?
     
+    // Significant location change mode
+    var isUsingSignificantLocationChanges: Bool = false
+    
     // Adaptive GPS
     private(set) var adaptiveGPSManager: AdaptiveGPSManager
     
@@ -78,6 +81,9 @@ final class LocationTrackingManager: NSObject {
     
     // Elevation tracking
     private(set) var elevationManager: ElevationManager
+    
+    // Battery optimization
+    private(set) var batteryOptimizationManager: BatteryOptimizationManager
     
     // MARK: - Private Properties
     private let locationManager = CLLocationManager()
@@ -100,11 +106,13 @@ final class LocationTrackingManager: NSObject {
         self.adaptiveGPSManager = AdaptiveGPSManager()
         self.motionLocationManager = MotionLocationManager()
         self.elevationManager = ElevationManager()
+        self.batteryOptimizationManager = BatteryOptimizationManager()
         
         super.init()
         setupLocationManager()
         setupMotionLocationManager()
         setupElevationManager()
+        setupBatteryOptimization()
     }
     
     func setModelContext(_ context: ModelContext) {
@@ -114,10 +122,10 @@ final class LocationTrackingManager: NSObject {
     private func setupLocationManager() {
         locationManager.delegate = self
         locationManager.activityType = .fitness
-        locationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
-        locationManager.distanceFilter = kCLDistanceFilterNone
+        locationManager.desiredAccuracy = kCLLocationAccuracyBest // Start with Best instead of BestForNavigation
+        locationManager.distanceFilter = 5.0 // Start with reasonable distance filter
         locationManager.allowsBackgroundLocationUpdates = true
-        locationManager.pausesLocationUpdatesAutomatically = false
+        locationManager.pausesLocationUpdatesAutomatically = true // Allow iOS to optimize
         locationManager.showsBackgroundLocationIndicator = true
     }
     
@@ -128,6 +136,14 @@ final class LocationTrackingManager: NSObject {
     private func setupElevationManager() {
         // Elevation manager setup is handled in its initialization
         // Additional configuration can be added here if needed
+    }
+    
+    private func setupBatteryOptimization() {
+        batteryOptimizationManager.configure(
+            adaptiveGPS: adaptiveGPSManager,
+            motionLocation: motionLocationManager,
+            elevation: elevationManager
+        )
     }
     
     private func applyGPSConfiguration(_ config: GPSConfiguration) {
@@ -161,21 +177,21 @@ final class LocationTrackingManager: NSObject {
         isAutoPaused = false
         recentLocations.removeAll()
         
+        // Initialize battery optimization for session
+        batteryOptimizationManager.startSession(optimizationLevel: .balanced)
+        
         // Start location updates
         locationManager.startUpdatingLocation()
         
-        // Start motion tracking
+        // Start motion tracking with battery optimization
         motionLocationManager.startMotionTracking()
+        motionLocationManager.setBatteryOptimizedMode(true)
         
         // Start elevation tracking
         elevationManager.startTracking()
         
         // Start auto-pause monitoring
         startAutoPauseMonitoring()
-        
-        // Enable adaptive GPS
-        adaptiveGPSManager.setAdaptiveMode(true)
-        adaptiveGPSManager.setBatteryOptimization(true)
     }
     
     func pauseTracking() {
@@ -238,6 +254,9 @@ final class LocationTrackingManager: NSObject {
         isAutoPaused = false
         recentLocations.removeAll()
         
+        // End battery optimization session
+        batteryOptimizationManager.endSession()
+        
         // Reset managers
         adaptiveGPSManager.resetMetrics()
         // Reset motion location manager state
@@ -281,11 +300,33 @@ final class LocationTrackingManager: NSObject {
         if timeSinceMovement > autoPauseThreshold && !isAutoPaused {
             // Auto-pause triggered
             isAutoPaused = true
-            // Note: We don't actually pause tracking, just mark it as auto-paused
-            // This allows us to detect movement and auto-resume
+            
+            // Switch to significant location changes for battery savings
+            if timeSinceMovement > 120.0 { // 2 minutes of no movement
+                enableSignificantLocationChanges(true)
+            }
         } else if timeSinceMovement < 5.0 && isAutoPaused {
             // Movement detected, auto-resume
             isAutoPaused = false
+            enableSignificantLocationChanges(false)
+        }
+    }
+    
+    /// Enable or disable significant location changes mode
+    private func enableSignificantLocationChanges(_ enabled: Bool) {
+        guard enabled != isUsingSignificantLocationChanges else { return }
+        
+        isUsingSignificantLocationChanges = enabled
+        adaptiveGPSManager.enableSignificantLocationChanges(enabled)
+        
+        if enabled {
+            // Stop regular location updates and start significant changes
+            locationManager.stopUpdatingLocation()
+            locationManager.startMonitoringSignificantLocationChanges()
+        } else {
+            // Resume regular location updates
+            locationManager.stopMonitoringSignificantLocationChanges()
+            locationManager.startUpdatingLocation()
         }
     }
     
@@ -322,9 +363,8 @@ final class LocationTrackingManager: NSObject {
         adaptiveGPSManager.analyzeLocationUpdate(filteredLocation)
         
         // Apply adaptive GPS configuration if changed
-        if let newConfig = adaptiveGPSManager.currentConfiguration as? GPSConfiguration,
-           shouldUpdateConfiguration() {
-            applyGPSConfiguration(newConfig)
+        if shouldUpdateConfiguration() {
+            applyGPSConfiguration(adaptiveGPSManager.currentConfiguration)
         }
         
         // Process elevation data
@@ -377,7 +417,7 @@ final class LocationTrackingManager: NSObject {
             )
             
             // Add barometric altitude if available
-            if let barometricAltitude = elevationData.barometricRelativeAltitude {
+            if elevationData.barometricRelativeAltitude != nil {
                 locationPoint.barometricAltitude = elevationData.fusedElevation
             }
             
@@ -482,6 +522,31 @@ final class LocationTrackingManager: NSObject {
         adaptiveGPSManager.setBatteryOptimization(enabled)
     }
     
+    /// Set battery optimization level
+    func setBatteryOptimizationLevel(_ level: BatteryOptimizationManager.OptimizationLevel) {
+        batteryOptimizationManager.setOptimizationLevel(level)
+    }
+    
+    /// Get current battery usage estimate
+    func getBatteryUsageEstimate() -> Double {
+        return batteryOptimizationManager.currentBatteryUsage
+    }
+    
+    /// Get optimization recommendations
+    func getOptimizationRecommendations() -> [String] {
+        return batteryOptimizationManager.getOptimizationRecommendations()
+    }
+    
+    /// Get comprehensive optimization report
+    func getBatteryOptimizationReport() -> String {
+        return batteryOptimizationManager.getOptimizationReport()
+    }
+    
+    /// Enable or disable auto-optimization
+    func setAutoOptimization(_ enabled: Bool) {
+        batteryOptimizationManager.setAutoOptimization(enabled)
+    }
+    
     /// Get debug information
     func getDebugInfo() -> String {
         return """
@@ -491,12 +556,20 @@ final class LocationTrackingManager: NSObject {
         Distance: \(String(format: "%.2f", totalDistance))m
         Current Pace: \(String(format: "%.2f", currentPace)) min/km
         Auto-Paused: \(isAutoPaused)
+        Significant Location: \(isUsingSignificantLocationChanges)
+        
+        === Battery Optimization ===
+        Level: \(batteryOptimizationManager.currentOptimizationLevel.rawValue)
+        Usage: \(String(format: "%.1f", batteryOptimizationManager.currentBatteryUsage))%/hr
+        Target: \(String(format: "%.1f", batteryOptimizationManager.targetBatteryUsage))%/hr
+        Status: \(batteryOptimizationManager.batteryHealthStatus)
+        \(batteryOptimizationManager.optimizationSummary)
         
         === Adaptive GPS ===
         Mode: \(adaptiveGPSManager.isAdaptiveMode ? "Adaptive" : "Manual")
         Pattern: \(adaptiveGPSManager.currentMovementPattern.rawValue)
         Update Frequency: \(String(format: "%.1f", adaptiveGPSManager.currentUpdateFrequencyHz))Hz
-        Battery Usage: \(String(format: "%.1f", batteryUsageEstimate))%/hr
+        Ultra Low Power: \(adaptiveGPSManager.isUltraLowPowerModeEnabled)
         Battery Alert: \(shouldShowBatteryAlert)
         
         === Motion Tracking ===
@@ -504,6 +577,7 @@ final class LocationTrackingManager: NSObject {
         Confidence: \(String(format: "%.0f", motionConfidence * 100))%
         Suppressing: \(isLocationUpdatesSuppressed)
         Stationary: \(String(format: "%.0f", stationaryDuration))s
+        Battery Mode: \(motionLocationManager.batteryOptimizedMode)
         
         === Elevation ===
         Current: \(String(format: "%.1f", elevationManager.currentElevation))m
@@ -511,6 +585,7 @@ final class LocationTrackingManager: NSObject {
         Loss: \(String(format: "%.1f", elevationManager.elevationLoss))m
         Grade: \(String(format: "%.1f", elevationManager.currentGrade))%
         Confidence: \(String(format: "%.0f", elevationManager.elevationConfidence * 100))%
+        Battery Mode: \(elevationManager.batteryOptimizedMode)
         Barometer: \(elevationManager.isBarometerAvailable ? "Available" : "Unavailable")
         """
     }

@@ -371,12 +371,12 @@ final class MotionLocationManager: NSObject {
     // MARK: - Setup Methods
     
     private func setupMotionManager() {
-        motionManager.deviceMotionUpdateInterval = 0.1 // 10Hz for motion data
-        motionManager.accelerometerUpdateInterval = 0.1
-        motionManager.gyroUpdateInterval = 0.1
+        motionManager.deviceMotionUpdateInterval = 0.2 // 5Hz for motion data (reduced from 10Hz)
+        motionManager.accelerometerUpdateInterval = 0.2
+        motionManager.gyroUpdateInterval = 0.2
         
         motionQueue.maxConcurrentOperationCount = 1
-        motionQueue.qualityOfService = .userInitiated
+        motionQueue.qualityOfService = .utility // Reduced from userInitiated for battery savings
     }
     
     private func setupMotionQueue() {
@@ -453,10 +453,15 @@ final class MotionLocationManager: NSObject {
         batteryOptimizedMode = enabled
         
         if enabled {
-            // Reduce motion update frequency
-            motionManager.deviceMotionUpdateInterval = 0.2 // 5Hz instead of 10Hz
+            // Reduce motion update frequency for battery savings
+            motionManager.deviceMotionUpdateInterval = 0.5 // 2Hz for battery mode
+            motionManager.accelerometerUpdateInterval = 0.5
+            motionManager.gyroUpdateInterval = 0.5
         } else {
-            motionManager.deviceMotionUpdateInterval = 0.1 // Back to 10Hz
+            // Standard reduced frequency (not the original aggressive 10Hz)
+            motionManager.deviceMotionUpdateInterval = 0.2 // 5Hz standard
+            motionManager.accelerometerUpdateInterval = 0.2
+            motionManager.gyroUpdateInterval = 0.2
         }
     }
     

@@ -28,7 +28,8 @@ final class ElevationManager {
     var elevationLoss: Double = 0
     var elevationConfidence: Double = 0
     var isBarometerAvailable = false
-    var configuration: ElevationConfiguration = .balanced
+    var configuration: ElevationConfiguration = .batterySaver // Start with battery-optimized mode
+    var batteryOptimizedMode: Bool = true
     
     // Private properties
     private let altimeter = CMAltimeter()
@@ -123,6 +124,18 @@ final class ElevationManager {
         lastValidElevation = nil
         baseElevation = nil
         relativeAltitude = 0
+    }
+    
+    /// Enable or disable battery optimized mode
+    func setBatteryOptimizedMode(_ enabled: Bool) {
+        batteryOptimizedMode = enabled
+        configuration = enabled ? .batterySaver : .balanced
+        
+        if isTracking {
+            // Restart with new configuration
+            stopTracking()
+            startTracking()
+        }
     }
     
     // MARK: - Private Methods

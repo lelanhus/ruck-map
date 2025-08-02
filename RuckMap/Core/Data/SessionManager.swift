@@ -319,18 +319,14 @@ actor SessionManager {
     
     /// Performs background maintenance tasks
     private func performBackgroundMaintenance() async {
-        do {
-            // TODO: Update elevation metrics for active sessions
-            // This needs to be refactored to work within actor boundaries
-            logger.debug("Elevation metrics update skipped due to actor isolation")
-            
-            // Cleanup old temporary data if needed
-            await cleanupOldTempData()
-            
-            logger.debug("Background maintenance completed")
-        } catch {
-            logger.error("Background maintenance failed: \(error.localizedDescription)")
-        }
+        // TODO: Update elevation metrics for active sessions
+        // This needs to be refactored to work within actor boundaries
+        logger.debug("Elevation metrics update skipped due to actor isolation")
+        
+        // Cleanup old temporary data if needed
+        await cleanupOldTempData()
+        
+        logger.debug("Background maintenance completed")
     }
     
     /// Updates session location points (for compression)

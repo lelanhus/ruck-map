@@ -8,12 +8,14 @@ enum PowerState: String, CaseIterable, Sendable {
     case normal
     case lowPowerMode
     case critical
+    case ultraLowPower // For sessions >2 hours
     
     var batteryThreshold: Double {
         switch self {
         case .normal: return 0.3 // 30%
         case .lowPowerMode: return 0.2 // 20%
         case .critical: return 0.1 // 10%
+        case .ultraLowPower: return 0.0 // Time-based, not battery-based
         }
     }
 }
@@ -41,15 +43,22 @@ struct GPSConfiguration: Sendable {
     
     static let batterySaver = GPSConfiguration(
         accuracy: kCLLocationAccuracyNearestTenMeters,
-        distanceFilter: 10.0,
-        updateFrequency: 1.0, // 1Hz
+        distanceFilter: 15.0,
+        updateFrequency: 2.0, // 0.5Hz
         activityType: .fitness
     )
     
     static let critical = GPSConfiguration(
         accuracy: kCLLocationAccuracyHundredMeters,
-        distanceFilter: 15.0,
-        updateFrequency: 2.0, // 0.5Hz
+        distanceFilter: 25.0,
+        updateFrequency: 5.0, // 0.2Hz
+        activityType: .fitness
+    )
+    
+    static let ultraLowPower = GPSConfiguration(
+        accuracy: kCLLocationAccuracyHundredMeters,
+        distanceFilter: 50.0,
+        updateFrequency: 10.0, // 0.1Hz
         activityType: .fitness
     )
 }
@@ -128,6 +137,9 @@ final class AdaptiveGPSManager: NSObject {
     var averageSpeed: Double = 0.0
     var isAdaptiveMode: Bool = true
     var batteryOptimizationEnabled: Bool = true
+    var sessionStartTime: Date?
+    var isUltraLowPowerModeEnabled: Bool = false
+    var useSignificantLocationChanges: Bool = false
     
     // Performance metrics
     var updateCount: Int = 0
@@ -189,6 +201,23 @@ final class AdaptiveGPSManager: NSObject {
     func forceConfigurationUpdate() {
         updateBatteryStatus()
         updateConfiguration()
+    }
+    
+    /// Start tracking session for ultra-low power mode detection
+    func startSession() {
+        sessionStartTime = Date()
+        resetMetrics()
+    }
+    
+    /// Enable ultra-low power mode for long sessions
+    func enableUltraLowPowerMode(_ enabled: Bool) {
+        isUltraLowPowerModeEnabled = enabled
+        forceConfigurationUpdate()
+    }
+    
+    /// Enable significant location changes for stationary periods
+    func enableSignificantLocationChanges(_ enabled: Bool) {
+        useSignificantLocationChanges = enabled
     }
     
     /// Resets all tracking metrics
@@ -309,18 +338,36 @@ final class AdaptiveGPSManager: NSObject {
     }
     
     private func adjustConfigurationForBattery(_ config: GPSConfiguration) -> GPSConfiguration {
+        // Check for ultra-low power mode (sessions >2 hours)
+        if let startTime = sessionStartTime,
+           Date().timeIntervalSince(startTime) > 7200, // 2 hours
+           isUltraLowPowerModeEnabled {
+            return .ultraLowPower
+        }
+        
         switch batteryStatus.powerState {
         case .normal:
+            // Apply moderate optimizations for steady movement
+            if currentMovementPattern == .walking && averageSpeed > 0.8 && averageSpeed < 1.5 {
+                return GPSConfiguration(
+                    accuracy: config.accuracy,
+                    distanceFilter: max(config.distanceFilter, 12.0),
+                    updateFrequency: max(config.updateFrequency, 1.0),
+                    activityType: config.activityType
+                )
+            }
             return config
         case .lowPowerMode:
             return GPSConfiguration(
                 accuracy: max(config.accuracy, kCLLocationAccuracyNearestTenMeters),
-                distanceFilter: max(config.distanceFilter, 8.0),
-                updateFrequency: max(config.updateFrequency, 0.5),
+                distanceFilter: max(config.distanceFilter, 20.0),
+                updateFrequency: max(config.updateFrequency, 2.0),
                 activityType: config.activityType
             )
         case .critical:
             return .critical
+        case .ultraLowPower:
+            return .ultraLowPower
         }
     }
     
@@ -331,26 +378,51 @@ final class AdaptiveGPSManager: NSObject {
     }
     
     func updateBatteryUsageEstimate() {
-        // Simplified battery usage estimation based on configuration
+        // Enhanced battery usage estimation with more aggressive optimizations
         let baseUsage: Double
         
         switch currentConfiguration.accuracy {
         case kCLLocationAccuracyBestForNavigation:
-            baseUsage = 12.0 // 12% per hour
+            baseUsage = 15.0 // 15% per hour (more realistic for continuous nav accuracy)
         case kCLLocationAccuracyBest:
-            baseUsage = 8.0 // 8% per hour
+            baseUsage = 10.0 // 10% per hour
         case kCLLocationAccuracyNearestTenMeters:
-            baseUsage = 5.0 // 5% per hour
-        case kCLLocationAccuracyHundredMeters:
-            baseUsage = 3.0 // 3% per hour
-        default:
             baseUsage = 6.0 // 6% per hour
+        case kCLLocationAccuracyHundredMeters:
+            baseUsage = 3.5 // 3.5% per hour
+        default:
+            baseUsage = 7.0 // 7% per hour
         }
         
-        // Adjust for update frequency (more frequent = more battery)
-        let frequencyMultiplier = currentConfiguration.updateFrequency < 0.5 ? 1.5 : 1.0
+        // Frequency multiplier with more aggressive scaling
+        var frequencyMultiplier: Double = 1.0
+        if currentConfiguration.updateFrequency < 0.5 {
+            frequencyMultiplier = 1.8 // Very frequent updates
+        } else if currentConfiguration.updateFrequency < 1.0 {
+            frequencyMultiplier = 1.4 // Frequent updates
+        } else if currentConfiguration.updateFrequency >= 5.0 {
+            frequencyMultiplier = 0.6 // Very infrequent updates
+        } else if currentConfiguration.updateFrequency >= 2.0 {
+            frequencyMultiplier = 0.8 // Infrequent updates
+        }
         
-        batteryUsageEstimate = baseUsage * frequencyMultiplier
+        // Distance filter optimization bonus
+        let distanceFilterBonus = currentConfiguration.distanceFilter >= 20.0 ? 0.85 : 1.0
+        
+        // Movement pattern optimization
+        let movementMultiplier: Double
+        switch currentMovementPattern {
+        case .stationary:
+            movementMultiplier = useSignificantLocationChanges ? 0.3 : 0.7
+        case .walking:
+            movementMultiplier = averageSpeed > 0.8 && averageSpeed < 1.5 ? 0.9 : 1.0
+        case .jogging, .running:
+            movementMultiplier = 1.1 // Require more frequent updates
+        case .unknown:
+            movementMultiplier = 1.0
+        }
+        
+        batteryUsageEstimate = baseUsage * frequencyMultiplier * distanceFilterBonus * movementMultiplier
     }
     
     // MARK: - Public Configuration Properties

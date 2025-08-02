@@ -64,7 +64,7 @@ struct SessionDetailView: View {
             Text(session.startDate.formatted(date: .abbreviated, time: .shortened))
                 .font(.headline)
             
-            if let endDate = session.endDate {
+            if session.endDate != nil {
                 Text("Duration: \(formatDuration(session.duration))")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
@@ -284,12 +284,8 @@ struct SessionDetailView: View {
     
     private func shareSession() {
         Task {
-            do {
-                let shareManager = ShareManager()
-                await shareManager.shareSession(sessionId: session.id, format: .gpx, dataCoordinator: dataCoordinator)
-            } catch {
-                exportError = error
-            }
+            let shareManager = ShareManager()
+            await shareManager.shareSession(sessionId: session.id, format: .gpx, dataCoordinator: dataCoordinator)
         }
     }
 }
