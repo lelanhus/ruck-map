@@ -3,6 +3,119 @@ import CoreLocation
 import CoreMotion
 import SwiftData
 import Observation
+import UIKit
+
+// MARK: - Motion Activity Type (Temporary inline definition)
+enum MotionActivityType: String, CaseIterable, Sendable {
+    case stationary
+    case walking
+    case running
+    case cycling
+    case automotive
+    case unknown
+    
+    var description: String {
+        switch self {
+        case .stationary: return "Stationary"
+        case .walking: return "Walking"
+        case .running: return "Running"
+        case .cycling: return "Cycling"
+        case .automotive: return "Driving"
+        case .unknown: return "Unknown"
+        }
+    }
+}
+
+// MARK: - GPS Configuration (Temporary inline definition)
+struct GPSConfiguration: Sendable {
+    let accuracy: CLLocationAccuracy
+    let distanceFilter: CLLocationDistance
+    let updateFrequency: TimeInterval
+    let activityType: CLActivityType
+    
+    static let highPerformance = GPSConfiguration(
+        accuracy: kCLLocationAccuracyBestForNavigation,
+        distanceFilter: 5.0,
+        updateFrequency: 0.1,
+        activityType: .fitness
+    )
+    
+    static let balanced = GPSConfiguration(
+        accuracy: kCLLocationAccuracyBest,
+        distanceFilter: 7.0,
+        updateFrequency: 0.5,
+        activityType: .fitness
+    )
+    
+    static let batterySaver = GPSConfiguration(
+        accuracy: kCLLocationAccuracyNearestTenMeters,
+        distanceFilter: 10.0,
+        updateFrequency: 1.0,
+        activityType: .fitness
+    )
+}
+
+// MARK: - Movement Pattern (Temporary inline definition)
+enum MovementPattern: String, CaseIterable, Sendable {
+    case stationary
+    case walking
+    case jogging
+    case running
+    case unknown
+}
+
+// MARK: - Simplified Adaptive GPS Manager (Temporary inline)
+@Observable
+@MainActor
+final class AdaptiveGPSManager: NSObject {
+    var currentConfiguration: GPSConfiguration = .balanced
+    var currentMovementPattern: MovementPattern = .unknown
+    var isAdaptiveMode: Bool = true
+    var batteryOptimizationEnabled: Bool = true
+    var batteryUsageEstimate: Double = 5.0
+    var shouldShowBatteryAlert: Bool = false
+    var batteryAlertMessage: String = ""
+    var isHighPerformanceMode: Bool = false
+    var currentUpdateFrequencyHz: Double = 2.0
+    
+    func analyzeLocationUpdate(_ location: CLLocation) {}
+    func forceConfigurationUpdate() {}
+    func resetMetrics() {}
+    func setAdaptiveMode(_ enabled: Bool) {
+        isAdaptiveMode = enabled
+    }
+    func setBatteryOptimization(_ enabled: Bool) {
+        batteryOptimizationEnabled = enabled
+    }
+    
+    var debugInfo: String {
+        "Adaptive GPS Manager - Simplified Version"
+    }
+}
+
+// MARK: - Simplified Motion Location Manager (Temporary inline)
+@Observable  
+@MainActor
+final class MotionLocationManager: NSObject {
+    var currentMotionActivity: MotionActivityType = .unknown
+    var motionConfidence: Double = 0.0
+    var suppressLocationUpdates: Bool = false
+    var motionPredictedLocation: CLLocation?
+    var stationaryDuration: TimeInterval = 0.0
+    
+    func startMotionTracking() {}
+    func stopMotionTracking() {}
+    func processLocationUpdate(_ location: CLLocation) async -> CLLocation {
+        return location
+    }
+    func setAdaptiveGPSManager(_ manager: AdaptiveGPSManager) {}
+    func setBatteryOptimizedMode(_ enabled: Bool) {}
+    func enableMotionPrediction(_ enabled: Bool) {}
+    
+    var debugInfo: String {
+        "Motion Location Manager - Simplified Version"
+    }
+}
 
 // MARK: - Tracking State
 enum TrackingState: String, CaseIterable, Sendable {
@@ -73,6 +186,12 @@ final class LocationTrackingManager: NSObject {
     var isAutoPaused: Bool = false
     var lastMovementTime: Date?
     
+    // Adaptive GPS
+    private(set) var adaptiveGPSManager: AdaptiveGPSManager
+    
+    // Motion-based location optimization
+    private(set) var motionLocationManager: MotionLocationManager
+    
     // MARK: - Private Properties
     private let locationManager = CLLocationManager()
     private let altimeter = CMAltimeter()
@@ -87,14 +206,19 @@ final class LocationTrackingManager: NSObject {
     private let movementThreshold: Double = 2.0 // meters
     private var autoPauseTimer: Timer?
     
-    // Battery optimization
+    // Adaptive update timing
     private var lastLocationUpdate: Date?
-    private let minimumUpdateInterval: TimeInterval = 1.0 // seconds
+    private var updateThrottleTimer: Timer?
     
     // MARK: - Initialization
     override init() {
+        // Initialize dependencies
+        self.adaptiveGPSManager = AdaptiveGPSManager()
+        self.motionLocationManager = MotionLocationManager()
+        
         super.init()
         setupLocationManager()
+        setupMotionLocationManager()
     }
     
     func setModelContext(_ context: ModelContext) {
@@ -104,11 +228,26 @@ final class LocationTrackingManager: NSObject {
     private func setupLocationManager() {
         locationManager.delegate = self
         locationManager.activityType = .fitness
-        locationManager.distanceFilter = kCLDistanceFilterNone
-        locationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
         locationManager.allowsBackgroundLocationUpdates = true
         locationManager.pausesLocationUpdatesAutomatically = false
         locationManager.showsBackgroundLocationIndicator = true
+        
+        // Apply initial adaptive GPS configuration
+        applyGPSConfiguration(adaptiveGPSManager.currentConfiguration)
+    }
+    
+    private func setupMotionLocationManager() {
+        // Connect motion location manager with adaptive GPS manager
+        motionLocationManager.setAdaptiveGPSManager(adaptiveGPSManager)
+        
+        // Configure battery optimization based on adaptive GPS settings
+        motionLocationManager.setBatteryOptimizedMode(adaptiveGPSManager.batteryOptimizationEnabled)
+    }
+    
+    private func applyGPSConfiguration(_ config: GPSConfiguration) {
+        locationManager.desiredAccuracy = config.accuracy
+        locationManager.distanceFilter = config.distanceFilter
+        locationManager.activityType = config.activityType
     }
     
     // MARK: - Public Methods
@@ -129,9 +268,18 @@ final class LocationTrackingManager: NSObject {
         isAutoPaused = false
         lastMovementTime = Date()
         
+        // Reset adaptive GPS metrics for new session
+        adaptiveGPSManager.resetMetrics()
+        
+        // Apply current adaptive GPS configuration
+        applyGPSConfiguration(adaptiveGPSManager.currentConfiguration)
+        
         // Start location updates
         locationManager.startUpdatingLocation()
         locationManager.startUpdatingHeading()
+        
+        // Start motion tracking for enhanced accuracy
+        motionLocationManager.startMotionTracking()
         
         // Start altimeter if available
         if CMAltimeter.isRelativeAltitudeAvailable() {
@@ -173,6 +321,7 @@ final class LocationTrackingManager: NSObject {
         // Stop all tracking
         locationManager.stopUpdatingLocation()
         locationManager.stopUpdatingHeading()
+        motionLocationManager.stopMotionTracking()
         altimeter.stopRelativeAltitudeUpdates()
         stopAutoPauseMonitoring()
         
@@ -195,15 +344,34 @@ final class LocationTrackingManager: NSObject {
     
     // MARK: - Private Methods
     private func processLocationUpdate(_ location: CLLocation) {
-        // Battery optimization: limit update frequency
-        if let lastUpdate = lastLocationUpdate,
-           Date().timeIntervalSince(lastUpdate) < minimumUpdateInterval {
+        // Process location through motion-based optimization
+        Task { @MainActor in
+            let optimizedLocation = await motionLocationManager.processLocationUpdate(location)
+            await processOptimizedLocation(optimizedLocation, originalLocation: location)
+        }
+    }
+    
+    private func processOptimizedLocation(_ location: CLLocation, originalLocation: CLLocation) async {
+        // Adaptive GPS frequency throttling
+        if shouldThrottleUpdate(for: location) {
             return
         }
         
         lastLocationUpdate = Date()
         currentLocation = location
         gpsAccuracy = GPSAccuracy(from: location.horizontalAccuracy)
+        
+        // Update adaptive GPS manager with original location data for metrics
+        adaptiveGPSManager.analyzeLocationUpdate(originalLocation)
+        
+        // Apply configuration changes if needed
+        let previousConfig = adaptiveGPSManager.currentConfiguration
+        if hasConfigurationChanged(previousConfig) {
+            applyGPSConfiguration(adaptiveGPSManager.currentConfiguration)
+            
+            // Update motion location manager with new battery optimization settings
+            motionLocationManager.setBatteryOptimizedMode(adaptiveGPSManager.batteryOptimizationEnabled)
+        }
         
         // Only process if tracking and location is valid
         guard trackingState == .tracking,
@@ -314,6 +482,97 @@ final class LocationTrackingManager: NSObject {
             isAutoPaused = true
             pauseTracking()
         }
+    }
+    
+    // MARK: - Adaptive GPS Helper Methods
+    
+    private func shouldThrottleUpdate(for location: CLLocation) -> Bool {
+        guard let lastUpdate = lastLocationUpdate else { return false }
+        
+        let requiredInterval = adaptiveGPSManager.currentConfiguration.updateFrequency
+        let timeSinceLastUpdate = Date().timeIntervalSince(lastUpdate)
+        
+        return timeSinceLastUpdate < requiredInterval
+    }
+    
+    private func hasConfigurationChanged(_ previousConfig: GPSConfiguration) -> Bool {
+        let currentConfig = adaptiveGPSManager.currentConfiguration
+        return previousConfig.accuracy != currentConfig.accuracy ||
+               previousConfig.distanceFilter != currentConfig.distanceFilter ||
+               previousConfig.activityType != currentConfig.activityType
+    }
+    
+    // MARK: - Public Adaptive GPS Methods
+    
+    func enableAdaptiveGPS(_ enabled: Bool) {
+        adaptiveGPSManager.setAdaptiveMode(enabled)
+        if enabled {
+            applyGPSConfiguration(adaptiveGPSManager.currentConfiguration)
+        } else {
+            // Revert to high performance mode when adaptive is disabled
+            applyGPSConfiguration(.highPerformance)
+        }
+    }
+    
+    func enableBatteryOptimization(_ enabled: Bool) {
+        adaptiveGPSManager.setBatteryOptimization(enabled)
+        motionLocationManager.setBatteryOptimizedMode(enabled)
+        applyGPSConfiguration(adaptiveGPSManager.currentConfiguration)
+    }
+    
+    func forceGPSConfigurationUpdate() {
+        adaptiveGPSManager.forceConfigurationUpdate()
+        applyGPSConfiguration(adaptiveGPSManager.currentConfiguration)
+    }
+    
+    // MARK: - Motion-Based Optimization Controls
+    
+    func enableMotionPrediction(_ enabled: Bool) {
+        motionLocationManager.enableMotionPrediction(enabled)
+    }
+    
+    func getMotionActivity() -> MotionActivityType {
+        return motionLocationManager.currentMotionActivity
+    }
+    
+    func getMotionConfidence() -> Double {
+        return motionLocationManager.motionConfidence
+    }
+    
+    var isLocationUpdatesSuppressed: Bool {
+        return motionLocationManager.suppressLocationUpdates
+    }
+    
+    var stationaryDuration: TimeInterval {
+        return motionLocationManager.stationaryDuration
+    }
+    
+    var motionPredictedLocation: CLLocation? {
+        return motionLocationManager.motionPredictedLocation
+    }
+    
+    // MARK: - Battery Status
+    
+    var batteryUsageEstimate: Double {
+        adaptiveGPSManager.batteryUsageEstimate
+    }
+    
+    var shouldShowBatteryAlert: Bool {
+        adaptiveGPSManager.shouldShowBatteryAlert
+    }
+    
+    var batteryAlertMessage: String {
+        adaptiveGPSManager.batteryAlertMessage
+    }
+    
+    // MARK: - Enhanced Debug Information
+    
+    var extendedDebugInfo: String {
+        """
+        \(adaptiveGPSManager.debugInfo)
+        
+        \(motionLocationManager.debugInfo)
+        """
     }
 }
 

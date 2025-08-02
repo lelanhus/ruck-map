@@ -3,7 +3,7 @@ import SwiftData
 import MapKit
 
 struct ActiveTrackingView: View {
-    @Bindable var locationManager: LocationTrackingManager
+    @State var locationManager: LocationTrackingManager
     @Environment(\.modelContext) private var modelContext
     @State private var showEndConfirmation = false
     
@@ -33,23 +33,157 @@ struct ActiveTrackingView: View {
         }
     }
     
+    private var batteryUsageColor: Color {
+        let usage = locationManager.batteryUsageEstimate
+        switch usage {
+        case 0..<5:
+            return .green
+        case 5..<10:
+            return .blue
+        case 10..<15:
+            return .orange
+        default:
+            return .red
+        }
+    }
+    
+    private var motionActivityIcon: String {
+        switch locationManager.getMotionActivity() {
+        case .stationary:
+            return "figure.stand"
+        case .walking:
+            return "figure.walk"
+        case .running:
+            return "figure.run"
+        case .cycling:
+            return "bicycle"
+        case .automotive:
+            return "car.fill"
+        case .unknown:
+            return "questionmark.circle"
+        }
+    }
+    
+    private var motionActivityColor: Color {
+        let confidence = locationManager.getMotionConfidence()
+        switch locationManager.getMotionActivity() {
+        case .stationary:
+            return confidence > 0.7 ? .gray : .secondary
+        case .walking:
+            return confidence > 0.7 ? .green : .secondary
+        case .running:
+            return confidence > 0.7 ? .orange : .secondary
+        case .cycling:
+            return confidence > 0.7 ? .blue : .secondary
+        case .automotive:
+            return confidence > 0.7 ? .purple : .secondary
+        case .unknown:
+            return .secondary
+        }
+    }
+    
     var body: some View {
         VStack(spacing: 0) {
-            // Header with GPS status
-            HStack {
-                Label(locationManager.gpsAccuracy.description, systemImage: "location.fill")
-                    .font(.caption)
-                    .foregroundColor(Color(locationManager.gpsAccuracy.color))
-                    .padding(.horizontal)
-                
-                Spacer()
-                
-                if locationManager.isAutoPaused {
-                    Text("AUTO-PAUSED")
+            // Header with GPS status and adaptive info
+            VStack(spacing: 4) {
+                HStack {
+                    Label(locationManager.gpsAccuracy.description, systemImage: "location.fill")
                         .font(.caption)
-                        .fontWeight(.semibold)
+                        .foregroundColor(Color(locationManager.gpsAccuracy.color))
+                        .padding(.horizontal)
+                    
+                    Spacer()
+                    
+                    // Adaptive GPS indicator
+                    if locationManager.adaptiveGPSManager.isAdaptiveMode {
+                        HStack(spacing: 4) {
+                            Image(systemName: "brain.head.profile")
+                                .font(.caption)
+                            Text("ADAPTIVE")
+                                .font(.caption2)
+                                .fontWeight(.medium)
+                        }
+                        .foregroundColor(.blue)
+                        .padding(.horizontal)
+                    }
+                    
+                    if locationManager.isAutoPaused {
+                        Text("AUTO-PAUSED")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.orange)
+                            .padding(.horizontal)
+                    }
+                }
+                
+                // Motion and battery status
+                HStack {
+                    // Motion activity indicator
+                    HStack(spacing: 2) {
+                        Image(systemName: motionActivityIcon)
+                            .font(.caption2)
+                        Text(locationManager.getMotionActivity().description.uppercased())
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                    }
+                    .foregroundColor(motionActivityColor)
+                    .padding(.horizontal)
+                    
+                    Spacer()
+                    
+                    // Battery usage estimate
+                    HStack(spacing: 2) {
+                        Image(systemName: "battery.25")
+                            .font(.caption2)
+                        Text("\(String(format: "%.1f", locationManager.batteryUsageEstimate))%/hr")
+                            .font(.caption2)
+                    }
+                    .foregroundColor(batteryUsageColor)
+                    .padding(.horizontal)
+                }
+                
+                // Technical status row
+                HStack {
+                    // Location suppression status
+                    if locationManager.isLocationUpdatesSuppressed {
+                        HStack(spacing: 2) {
+                            Image(systemName: "pause.circle.fill")
+                                .font(.caption2)
+                            Text("SUPPRESSED")
+                                .font(.caption2)
+                                .fontWeight(.medium)
+                        }
                         .foregroundColor(.orange)
                         .padding(.horizontal)
+                    }
+                    
+                    Spacer()
+                    
+                    // Movement pattern
+                    Text(locationManager.adaptiveGPSManager.currentMovementPattern.rawValue.uppercased())
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal)
+                    
+                    // Update frequency
+                    Text("\(String(format: "%.1f", locationManager.adaptiveGPSManager.currentUpdateFrequencyHz))Hz")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal)
+                }
+                
+                // Battery alert if needed
+                if locationManager.shouldShowBatteryAlert {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.caption2)
+                        Text(locationManager.batteryAlertMessage)
+                            .font(.caption2)
+                    }
+                    .foregroundColor(.orange)
+                    .padding(.horizontal)
+                    .padding(.top, 2)
                 }
             }
             .padding(.vertical, 8)
