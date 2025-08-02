@@ -5,30 +5,6 @@ import MapKit
 import UIKit
 import Observation
 
-// MARK: - Terrain Detection Error
-/// Errors that can occur during terrain detection
-enum TerrainDetectionError: LocalizedError, Sendable {
-    case lowConfidence(Double)
-    case sensorFailure(String)
-    case locationUnavailable
-    case motionDataInsufficient
-    case analysisTimeout
-    
-    var errorDescription: String? {
-        switch self {
-        case .lowConfidence(let confidence):
-            return "Terrain detection confidence too low: \(String(format: "%.1f", confidence * 100))%"
-        case .sensorFailure(let sensor):
-            return "Sensor failure: \(sensor)"
-        case .locationUnavailable:
-            return "Location data unavailable for terrain detection"
-        case .motionDataInsufficient:
-            return "Insufficient motion data for terrain analysis"
-        case .analysisTimeout:
-            return "Terrain analysis timed out"
-        }
-    }
-}
 
 // MARK: - Motion Pattern Analysis
 /// Motion pattern characteristics for different terrain types
@@ -46,26 +22,6 @@ struct MotionPattern: Sendable {
     }
 }
 
-// MARK: - Terrain Detection Result
-/// Result of terrain detection with confidence metrics
-struct TerrainDetectionResult: Sendable {
-    let terrainType: TerrainType
-    let confidence: Double // 0.0 to 1.0
-    let detectionMethod: DetectionMethod
-    let timestamp: Date
-    let isManualOverride: Bool
-    
-    enum DetectionMethod: Sendable {
-        case mapKitOnly
-        case motionOnly
-        case fusion // Combined MapKit + Motion
-        case manualOverride
-    }
-    
-    var terrainFactor: Double {
-        terrainType.terrainFactor
-    }
-}
 
 // MARK: - Terrain Detection Manager
 /// Manages automatic terrain detection using MapKit + motion patterns
