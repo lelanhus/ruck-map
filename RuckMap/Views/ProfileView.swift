@@ -1,37 +1,6 @@
 import SwiftUI
 import SwiftData
 
-/// Temporary FormatUtilities - should be moved to separate file when project structure is fixed
-private enum FormatUtilities {
-    enum ConversionConstants {
-        static let poundsToKilograms = 0.453592
-        static let kilogramsToPounds = 2.20462
-        static let metersToMiles = 1609.34
-        static let metersToKilometers = 1000.0
-    }
-    
-    static func formatDistance(_ meters: Double, units: String = "imperial") -> String {
-        if units == "imperial" {
-            let miles = meters / ConversionConstants.metersToMiles
-            return String(format: "%.1f mi", miles)
-        } else {
-            let kilometers = meters / ConversionConstants.metersToKilometers
-            return String(format: "%.1f km", kilometers)
-        }
-    }
-    
-    static func formatTotalDuration(_ seconds: TimeInterval) -> String {
-        let hours = Int(seconds) / 3600
-        return "\(hours)h"
-    }
-    
-    static func formatMemberSince(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMMM yyyy"
-        return formatter.string(from: date)
-    }
-}
-
 /// Profile view displaying user statistics, achievements, and app settings
 /// Provides comprehensive user data overview and customization options
 struct ProfileView: View {

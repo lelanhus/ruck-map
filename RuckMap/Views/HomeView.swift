@@ -1,82 +1,25 @@
 import SwiftUI
 import SwiftData
 
-/// Temporary FormatUtilities - should be moved to separate file when project structure is fixed
-private enum FormatUtilities {
-    enum ConversionConstants {
-        static let poundsToKilograms = 0.453592
-        static let kilogramsToPounds = 2.20462
-        static let metersToMiles = 1609.34
-        static let metersToKilometers = 1000.0
-    }
-    
-    static func formatDistance(_ meters: Double, units: String = "imperial") -> String {
-        if units == "imperial" {
-            let miles = meters / ConversionConstants.metersToMiles
-            return String(format: "%.1f mi", miles)
-        } else {
-            let kilometers = meters / ConversionConstants.metersToKilometers
-            return String(format: "%.1f km", kilometers)
-        }
-    }
-    
-    static func formatDistancePrecise(_ meters: Double, units: String = "imperial") -> String {
-        if units == "imperial" {
-            let miles = meters / ConversionConstants.metersToMiles
-            return String(format: "%.2f mi", miles)
-        } else {
-            let kilometers = meters / ConversionConstants.metersToKilometers
-            return String(format: "%.2f km", kilometers)
-        }
-    }
-    
-    static func formatDuration(_ seconds: TimeInterval) -> String {
-        let hours = Int(seconds) / 3600
-        let minutes = Int(seconds) % 3600 / 60
-        
-        if hours > 0 {
-            return String(format: "%d:%02d", hours, minutes)
-        } else {
-            return String(format: "%d min", minutes)
-        }
-    }
-    
-    static func poundsToKilograms(_ pounds: Double) -> Double {
-        pounds * ConversionConstants.poundsToKilograms
-    }
-    
-    static func formatWeight(_ kilograms: Double, units: String = "imperial") -> String {
-        if units == "imperial" {
-            let pounds = kilograms * ConversionConstants.kilogramsToPounds
-            return String(format: "%.0f lbs", pounds)
-        } else {
-            return String(format: "%.0f kg", kilograms)
-        }
-    }
-    
-    static func formatSessionDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        return formatter.string(from: date)
-    }
-}
-
 /// Home screen providing quick ruck start functionality and session overview
 /// Handles both inactive state and active tracking transitions
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var sessions: [RuckSession]
     @State var locationManager: LocationTrackingManager
-    @State private var currentWeight: Double = 35.0 // Default 35 lbs
+    @State private var currentWeight: Double = AppConstants.defaultWeightPounds
     @AppStorage("preferredUnits") private var preferredUnits = "imperial"
     @State private var showingErrorAlert = false
     @State private var errorMessage = ""
+    
+    /// Optional navigation action for switching to history tab
+    var onViewAllTapped: (() -> Void)?
     
     private var recentSessions: [RuckSession] {
         sessions
             .filter { $0.endDate != nil }
             .sorted { $0.startDate > $1.startDate }
-            .prefix(3)
+            .prefix(AppConstants.recentSessionsDisplayCount)
             .map { $0 }
     }
     
@@ -190,10 +133,10 @@ struct HomeView: View {
                             .font(.title2)
                             .foregroundColor(.armyGreenPrimary)
                     }
-                    .disabled(currentWeight <= 0)
+                    .disabled(currentWeight <= AppConstants.minimumWeightPounds)
                     .accessibilityLabel("Decrease weight by 5 pounds")
                     
-                    Slider(value: $currentWeight, in: 0...200, step: 5)
+                    Slider(value: $currentWeight, in: AppConstants.minimumWeightPounds...AppConstants.maximumWeightPounds, step: AppConstants.weightAdjustmentStep)
                         .tint(.armyGreenPrimary)
                         .accessibilityLabel("Load weight slider")
                         .accessibilityValue("\(Int(currentWeight)) pounds")
@@ -203,7 +146,7 @@ struct HomeView: View {
                             .font(.title2)
                             .foregroundColor(.armyGreenPrimary)
                     }
-                    .disabled(currentWeight >= 200)
+                    .disabled(currentWeight >= AppConstants.maximumWeightPounds)
                     .accessibilityLabel("Increase weight by 5 pounds")
                 }
             }
@@ -237,7 +180,7 @@ struct HomeView: View {
                 Spacer()
                 
                 Button("View All") {
-                    // TODO: Implement navigation to history tab
+                    onViewAllTapped?()
                 }
                 .font(.subheadline)
                 .foregroundColor(.armyGreenPrimary)
@@ -255,7 +198,7 @@ struct HomeView: View {
     
     private func adjustWeight(_ change: Double) {
         let newWeight = currentWeight + change
-        if newWeight >= 0 && newWeight <= 200 {
+        if newWeight >= AppConstants.minimumWeightPounds && newWeight <= AppConstants.maximumWeightPounds {
             currentWeight = newWeight
         }
     }

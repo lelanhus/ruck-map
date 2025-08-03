@@ -1,67 +1,6 @@
 import SwiftUI
 import SwiftData
 
-/// Temporary FormatUtilities - should be moved to separate file when project structure is fixed
-private enum FormatUtilities {
-    enum ConversionConstants {
-        static let poundsToKilograms = 0.453592
-        static let kilogramsToPounds = 2.20462
-        static let metersToMiles = 1609.34
-        static let metersToKilometers = 1000.0
-    }
-    
-    static func formatDistance(_ meters: Double, units: String = "imperial") -> String {
-        if units == "imperial" {
-            let miles = meters / ConversionConstants.metersToMiles
-            return String(format: "%.1f mi", miles)
-        } else {
-            let kilometers = meters / ConversionConstants.metersToKilometers
-            return String(format: "%.1f km", kilometers)
-        }
-    }
-    
-    static func formatDistancePrecise(_ meters: Double, units: String = "imperial") -> String {
-        if units == "imperial" {
-            let miles = meters / ConversionConstants.metersToMiles
-            return String(format: "%.2f mi", miles)
-        } else {
-            let kilometers = meters / ConversionConstants.metersToKilometers
-            return String(format: "%.2f km", kilometers)
-        }
-    }
-    
-    static func formatDuration(_ seconds: TimeInterval) -> String {
-        let hours = Int(seconds) / 3600
-        let minutes = Int(seconds) % 3600 / 60
-        
-        if hours > 0 {
-            return String(format: "%d:%02d", hours, minutes)
-        } else {
-            return String(format: "%d min", minutes)
-        }
-    }
-    
-    static func formatTotalDuration(_ seconds: TimeInterval) -> String {
-        let hours = Int(seconds) / 3600
-        return "\(hours)h"
-    }
-    
-    static func formatWeight(_ kilograms: Double, units: String = "imperial") -> String {
-        if units == "imperial" {
-            let pounds = kilograms * ConversionConstants.kilogramsToPounds
-            return String(format: "%.0f lbs", pounds)
-        } else {
-            return String(format: "%.0f kg", kilograms)
-        }
-    }
-    
-    static func formatSessionDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        return formatter.string(from: date)
-    }
-}
-
 /// History view displaying past ruck sessions with filtering and sorting options
 /// Provides detailed session management and statistics
 struct HistoryView: View {
@@ -296,11 +235,9 @@ struct HistoryView: View {
     
     
     private func sessionAccessibilityLabel(for session: RuckSession) -> String {
-        let distance = formatDistance(session.totalDistance)
-        let duration = formatTotalDuration(session.totalDuration)
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        let date = formatter.string(from: session.startDate)
+        let distance = FormatUtilities.formatDistance(session.totalDistance, units: preferredUnits)
+        let duration = FormatUtilities.formatTotalDuration(session.totalDuration)
+        let date = FormatUtilities.formatSessionDate(session.startDate)
         return "Ruck session: \(distance), \(duration), on \(date)"
     }
     

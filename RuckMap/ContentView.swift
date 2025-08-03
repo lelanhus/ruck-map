@@ -1,96 +1,12 @@
 import SwiftData
 import SwiftUI
 
-/// Constants used throughout the app to avoid magic numbers
-private enum Constants {
-    static let poundsToKilograms = 0.453592
-    static let kilogramsToPounds = 2.20462
-    static let metersToMiles = 1609.34
-    static let metersToKilometers = 1000.0
-}
-
-/// Temporary FormatUtilities - should be moved to separate file
-private enum FormatUtilities {
-    /// Conversion constants to avoid magic numbers
-    enum ConversionConstants {
-        static let poundsToKilograms = 0.453592
-        static let kilogramsToPounds = 2.20462
-        static let metersToMiles = 1609.34
-        static let metersToKilometers = 1000.0
-    }
-    
-    static func formatDistance(_ meters: Double, units: String = "imperial") -> String {
-        if units == "imperial" {
-            let miles = meters / ConversionConstants.metersToMiles
-            return String(format: "%.1f mi", miles)
-        } else {
-            let kilometers = meters / ConversionConstants.metersToKilometers
-            return String(format: "%.1f km", kilometers)
-        }
-    }
-    
-    static func formatDistancePrecise(_ meters: Double, units: String = "imperial") -> String {
-        if units == "imperial" {
-            let miles = meters / ConversionConstants.metersToMiles
-            return String(format: "%.2f mi", miles)
-        } else {
-            let kilometers = meters / ConversionConstants.metersToKilometers
-            return String(format: "%.2f km", kilometers)
-        }
-    }
-    
-    static func formatDuration(_ seconds: TimeInterval) -> String {
-        let hours = Int(seconds) / 3600
-        let minutes = Int(seconds) % 3600 / 60
-        
-        if hours > 0 {
-            return String(format: "%d:%02d", hours, minutes)
-        } else {
-            return String(format: "%d min", minutes)
-        }
-    }
-    
-    static func formatTotalDuration(_ seconds: TimeInterval) -> String {
-        let hours = Int(seconds) / 3600
-        return "\(hours)h"
-    }
-    
-    static func poundsToKilograms(_ pounds: Double) -> Double {
-        pounds * ConversionConstants.poundsToKilograms
-    }
-    
-    static func kilogramsToPounds(_ kilograms: Double) -> Double {
-        kilograms * ConversionConstants.kilogramsToPounds
-    }
-    
-    static func formatWeight(_ kilograms: Double, units: String = "imperial") -> String {
-        if units == "imperial" {
-            let pounds = kilogramsToPounds(kilograms)
-            return String(format: "%.0f lbs", pounds)
-        } else {
-            return String(format: "%.0f kg", kilograms)
-        }
-    }
-    
-    static func formatMemberSince(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMMM yyyy"
-        return formatter.string(from: date)
-    }
-    
-    static func formatSessionDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        return formatter.string(from: date)
-    }
-}
-
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var sessions: [RuckSession]
     @State private var locationManager = LocationTrackingManager()
     @State private var selectedTab: Tab = .home
-    @State private var currentWeight: Double = 35.0 // Default 35 lbs
+    @State private var currentWeight: Double = AppConstants.defaultWeightPounds
 
     /// Navigation tabs available in the app
     enum Tab: String, CaseIterable {
@@ -192,7 +108,7 @@ struct HomeTabContent: View {
         sessions
             .filter { $0.endDate != nil }
             .sorted { $0.startDate > $1.startDate }
-            .prefix(3)
+            .prefix(AppConstants.recentSessionsDisplayCount)
             .map(\.self)
     }
 
@@ -307,10 +223,10 @@ struct HomeTabContent: View {
                             .font(.title2)
                             .foregroundColor(Color.armyGreenPrimary)
                     }
-                    .disabled(currentWeight <= 0)
+                    .disabled(currentWeight <= AppConstants.minimumWeightPounds)
                     .accessibilityLabel("Decrease weight by 5 pounds")
 
-                    Slider(value: $currentWeight, in: 0 ... 200, step: 5)
+                    Slider(value: $currentWeight, in: AppConstants.minimumWeightPounds...AppConstants.maximumWeightPounds, step: AppConstants.weightAdjustmentStep)
                         .tint(Color.armyGreenPrimary)
                         .accessibilityLabel("Load weight slider")
                         .accessibilityValue("\(Int(currentWeight)) pounds")
@@ -320,7 +236,7 @@ struct HomeTabContent: View {
                             .font(.title2)
                             .foregroundColor(Color.armyGreenPrimary)
                     }
-                    .disabled(currentWeight >= 200)
+                    .disabled(currentWeight >= AppConstants.maximumWeightPounds)
                     .accessibilityLabel("Increase weight by 5 pounds")
                 }
             }
@@ -370,7 +286,7 @@ struct HomeTabContent: View {
 
     private func adjustWeight(_ change: Double) {
         let newWeight = currentWeight + change
-        if newWeight >= 0 && newWeight <= 200 {
+        if newWeight >= AppConstants.minimumWeightPounds && newWeight <= AppConstants.maximumWeightPounds {
             currentWeight = newWeight
         }
     }

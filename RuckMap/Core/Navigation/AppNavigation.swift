@@ -4,7 +4,6 @@ import SwiftUI
 /// Centralized navigation state management for RuckMap
 /// Provides type-safe navigation and tab coordination following iOS 18+ patterns
 @Observable
-@MainActor
 final class AppNavigation {
     // MARK: - Tab Navigation State
 
@@ -179,7 +178,7 @@ final class AppNavigation {
 
 /// Environment key for AppNavigation
 struct AppNavigationKey: EnvironmentKey {
-    nonisolated(unsafe) static let defaultValue = AppNavigation()
+    static let defaultValue = AppNavigation()
 }
 
 extension EnvironmentValues {
@@ -211,7 +210,6 @@ final class NavigationPreferences {
         case always = "Always"
         case never = "Never"
 
-        @MainActor
         var systemStyle: UITabBarAppearance {
             let appearance = UITabBarAppearance()
             switch self {
