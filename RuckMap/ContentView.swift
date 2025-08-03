@@ -1,6 +1,14 @@
 import SwiftData
 import SwiftUI
 
+/// Constants used throughout the app to avoid magic numbers
+private enum Constants {
+    static let poundsToKilograms = 0.453592
+    static let kilogramsToPounds = 2.20462
+    static let metersToMiles = 1609.34
+    static let metersToKilometers = 1000.0
+}
+
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var sessions: [RuckSession]
@@ -99,6 +107,8 @@ struct HomeTabContent: View {
     let sessions: [RuckSession]
     let modelContext: ModelContext
     @AppStorage("preferredUnits") private var preferredUnits = "imperial"
+    @State private var showingErrorAlert = false
+    @State private var errorMessage = ""
 
     private var recentSessions: [RuckSession] {
         sessions
@@ -140,9 +150,19 @@ struct HomeTabContent: View {
             .navigationTitle("RuckMap")
             .navigationBarTitleDisplayMode(.large)
             .background(Color.ruckMapBackground)
+            .alert("Error", isPresented: $showingErrorAlert) {
+                Button("OK") { }
+            } message: {
+                Text(errorMessage)
+            }
         } else {
             // Active tracking view
             ActiveTrackingView(locationManager: locationManager)
+                .alert("Error", isPresented: $showingErrorAlert) {
+                    Button("OK") { }
+                } message: {
+                    Text(errorMessage)
+                }
         }
     }
 
@@ -279,24 +299,30 @@ struct HomeTabContent: View {
 
     private func formatDistance(_ meters: Double) -> String {
         if preferredUnits == "imperial" {
-            let miles = meters / 1609.34
+            let miles = meters / Constants.metersToMiles
             return String(format: "%.1f mi", miles)
         } else {
-            let kilometers = meters / 1000
+            let kilometers = meters / Constants.metersToKilometers
             return String(format: "%.1f km", kilometers)
         }
     }
-
+    
+    private func formatTotalDuration(_ seconds: TimeInterval) -> String {
+        let hours = Int(seconds) / 3600
+        return "\(hours)h"
+    }
+    
     private func startQuickRuck() {
         let session = RuckSession()
-        session.loadWeight = currentWeight * 0.453592 // Convert lbs to kg
+        session.loadWeight = currentWeight * Constants.poundsToKilograms
         modelContext.insert(session)
 
         do {
             try modelContext.save()
             locationManager.startTracking(with: session)
         } catch {
-            print("Failed to save session: \(error)")
+            errorMessage = "Failed to save session: \(error.localizedDescription)"
+            showingErrorAlert = true
         }
     }
 }
@@ -308,6 +334,8 @@ struct HistoryTabContent: View {
     @State private var searchText = ""
     @State private var selectedSortOption: SortOption = .dateDescending
     @AppStorage("preferredUnits") private var preferredUnits = "imperial"
+    @State private var showingErrorAlert = false
+    @State private var errorMessage = ""
 
     enum SortOption: String, CaseIterable {
         case dateDescending = "Newest First"
@@ -390,6 +418,11 @@ struct HistoryTabContent: View {
                 .accessibilityLabel("Sort options")
             }
         }
+        .alert("Error", isPresented: $showingErrorAlert) {
+            Button("OK") { }
+        } message: {
+            Text(errorMessage)
+        }
     }
 
     private var statisticsHeader: some View {
@@ -410,7 +443,7 @@ struct HistoryTabContent: View {
 
             StatisticItem(
                 title: "Time",
-                value: formatDuration(filteredSessions.reduce(0) { $0 + $1.totalDuration }),
+                value: formatTotalDuration(filteredSessions.reduce(0) { $0 + $1.totalDuration }),
                 icon: "clock.circle",
                 color: .orange
             )
@@ -461,26 +494,6 @@ struct HistoryTabContent: View {
         }
     }
 
-    private func formatDistance(_ meters: Double) -> String {
-        if preferredUnits == "imperial" {
-            let miles = meters / 1609.34
-            return String(format: "%.1f mi", miles)
-        } else {
-            let kilometers = meters / 1000
-            return String(format: "%.1f km", kilometers)
-        }
-    }
-
-    private func formatDuration(_ seconds: TimeInterval) -> String {
-        let hours = Int(seconds) / 3600
-        if hours > 0 {
-            return "\(hours)h"
-        } else {
-            let minutes = Int(seconds) / 60
-            return "\(minutes)m"
-        }
-    }
-
     private func deleteSessions(offsets: IndexSet) {
         withAnimation {
             for index in offsets {
@@ -491,9 +504,25 @@ struct HistoryTabContent: View {
             do {
                 try modelContext.save()
             } catch {
-                print("Failed to delete sessions: \(error)")
+                errorMessage = "Failed to delete sessions: \(error.localizedDescription)"
+                showingErrorAlert = true
             }
         }
+    }
+    
+    private func formatDistance(_ meters: Double) -> String {
+        if preferredUnits == "imperial" {
+            let miles = meters / Constants.metersToMiles
+            return String(format: "%.1f mi", miles)
+        } else {
+            let kilometers = meters / Constants.metersToKilometers
+            return String(format: "%.1f km", kilometers)
+        }
+    }
+    
+    private func formatTotalDuration(_ seconds: TimeInterval) -> String {
+        let hours = Int(seconds) / 3600
+        return "\(hours)h"
     }
 }
 
@@ -685,24 +714,27 @@ struct ProfileTabContent: View {
 
     private var memberSinceDate: String {
         guard let firstSession = completedSessions.min(by: { $0.startDate < $1.startDate }) else {
-            return DateFormatter().string(from: Date())
+            return formatMemberSince(Date())
         }
-
+        return formatMemberSince(firstSession.startDate)
+    }
+    
+    private func formatMemberSince(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMMM yyyy"
-        return formatter.string(from: firstSession.startDate)
+        return formatter.string(from: date)
     }
-
+    
     private func formatDistance(_ meters: Double) -> String {
         if preferredUnits == "imperial" {
-            let miles = meters / 1609.34
+            let miles = meters / Constants.metersToMiles
             return String(format: "%.1f mi", miles)
         } else {
-            let kilometers = meters / 1000
+            let kilometers = meters / Constants.metersToKilometers
             return String(format: "%.1f km", kilometers)
         }
     }
-
+    
     private func formatTotalDuration(_ seconds: TimeInterval) -> String {
         let hours = Int(seconds) / 3600
         return "\(hours)h"
@@ -748,10 +780,10 @@ struct RecentSessionRow: View {
 
     private var formattedDistance: String {
         if preferredUnits == "imperial" {
-            let miles = session.totalDistance / 1609.34
+            let miles = session.totalDistance / Constants.metersToMiles
             return String(format: "%.2f mi", miles)
         } else {
-            let kilometers = session.totalDistance / 1000
+            let kilometers = session.totalDistance / Constants.metersToKilometers
             return String(format: "%.2f km", kilometers)
         }
     }
@@ -799,7 +831,7 @@ struct RecentSessionRow: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
 
-                    Label("\(Int(session.loadWeight * 2.20462)) lbs", systemImage: "backpack")
+                    Label("\(Int(session.loadWeight * Constants.kilogramsToPounds)) lbs", systemImage: "backpack")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -848,10 +880,10 @@ struct SessionListRow: View {
 
     private var formattedDistance: String {
         if preferredUnits == "imperial" {
-            let miles = session.totalDistance / 1609.34
+            let miles = session.totalDistance / Constants.metersToMiles
             return String(format: "%.2f mi", miles)
         } else {
-            let kilometers = session.totalDistance / 1000
+            let kilometers = session.totalDistance / Constants.metersToKilometers
             return String(format: "%.2f km", kilometers)
         }
     }
@@ -874,7 +906,7 @@ struct SessionListRow: View {
     }
 
     private var loadWeight: String {
-        let pounds = session.loadWeight * 2.20462
+        let pounds = session.loadWeight * Constants.kilogramsToPounds
         return String(format: "%.0f lbs", pounds)
     }
 

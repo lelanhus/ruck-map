@@ -9,6 +9,8 @@ struct HomeView: View {
     @State var locationManager: LocationTrackingManager
     @State private var currentWeight: Double = 35.0 // Default 35 lbs
     @AppStorage("preferredUnits") private var preferredUnits = "imperial"
+    @State private var showingErrorAlert = false
+    @State private var errorMessage = ""
     
     private var recentSessions: [RuckSession] {
         sessions
@@ -55,6 +57,11 @@ struct HomeView: View {
                 // Active tracking view
                 ActiveTrackingView(locationManager: locationManager)
             }
+        }
+        .alert("Error", isPresented: $showingErrorAlert) {
+            Button("OK") { }
+        } message: {
+            Text(errorMessage)
         }
     }
     
@@ -169,9 +176,8 @@ struct HomeView: View {
                 
                 Spacer()
                 
-                NavigationLink("View All") {
-                    // Navigation will be handled by parent TabView
-                    EmptyView()
+                Button("View All") {
+                    // This would switch to history tab in full implementation
                 }
                 .font(.subheadline)
                 .foregroundColor(.armyGreenPrimary)
@@ -213,7 +219,8 @@ struct HomeView: View {
             try modelContext.save()
             locationManager.startTracking(with: session)
         } catch {
-            print("Failed to save session: \(error)")
+            errorMessage = "Failed to save session: \(error.localizedDescription)"
+            showingErrorAlert = true
         }
     }
 }

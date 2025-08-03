@@ -11,6 +11,8 @@ struct HistoryView: View {
     @State private var showingFilterSheet = false
     @State private var selectedTimeRange: TimeRange = .all
     @AppStorage("preferredUnits") private var preferredUnits = "imperial"
+    @State private var showingErrorAlert = false
+    @State private var errorMessage = ""
     
     enum SortOption: String, CaseIterable {
         case dateDescending = "Newest First"
@@ -133,6 +135,11 @@ struct HistoryView: View {
                 }
             }
         }
+        .alert("Error", isPresented: $showingErrorAlert) {
+            Button("OK") { }
+        } message: {
+            Text(errorMessage)
+        }
     }
     
     // MARK: - View Components
@@ -155,7 +162,7 @@ struct HistoryView: View {
             
             StatisticItem(
                 title: "Time",
-                value: formatDuration(historyStats.totalDuration),
+                value: formatTotalDuration(historyStats.totalDuration),
                 icon: "clock.circle",
                 color: .orange
             )
@@ -236,20 +243,17 @@ struct HistoryView: View {
         }
     }
     
-    private func formatDuration(_ seconds: TimeInterval) -> String {
+    private func formatTotalDuration(_ seconds: TimeInterval) -> String {
         let hours = Int(seconds) / 3600
-        if hours > 0 {
-            return "\(hours)h"
-        } else {
-            let minutes = Int(seconds) / 60
-            return "\(minutes)m"
-        }
+        return "\(hours)h"
     }
     
     private func sessionAccessibilityLabel(for session: RuckSession) -> String {
         let distance = formatDistance(session.totalDistance)
-        let duration = formatDuration(session.totalDuration)
-        let date = DateFormatter.localizedString(from: session.startDate, dateStyle: .medium, timeStyle: .none)
+        let duration = formatTotalDuration(session.totalDuration)
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        let date = formatter.string(from: session.startDate)
         return "Ruck session: \(distance), \(duration), on \(date)"
     }
     
@@ -263,7 +267,8 @@ struct HistoryView: View {
             do {
                 try modelContext.save()
             } catch {
-                print("Failed to delete sessions: \(error)")
+                errorMessage = "Failed to delete sessions: \(error.localizedDescription)"
+                showingErrorAlert = true
             }
         }
     }
@@ -370,8 +375,8 @@ struct SessionListRow: View {
                 
                 Spacer()
                 
-                if session.rpe != nil {
-                    RPEBadge(rpe: session.rpe!)
+                if let rpe = session.rpe {
+                    RPEBadge(rpe: rpe)
                 }
             }
             
