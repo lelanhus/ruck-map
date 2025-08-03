@@ -405,10 +405,10 @@ struct WeatherServiceTests {
         )
         
         // Should not be expired initially
-        XCTAssertFalse(cacheEntry.isExpired)
+        #expect(cacheEntry.isExpired == false)
         
         // Should not be stale initially
-        XCTAssertFalse(cacheEntry.isStale)
+        #expect(cacheEntry.isStale == false)
     }
     
     // MARK: - Error Handling Tests
@@ -484,9 +484,9 @@ struct WeatherServiceTests {
             expirationDate: nil
         )
         
-        XCTAssertTrue(activeAlert.isActive)
-        XCTAssertFalse(expiredAlert.isActive)
-        XCTAssertTrue(permanentAlert.isActive)
+        #expect(activeAlert.isActive == true)
+        #expect(expiredAlert.isActive == false)
+        #expect(permanentAlert.isActive == true)
     }
     
     // MARK: - Performance Tests
@@ -515,11 +515,11 @@ struct WeatherServiceTests {
         let batteryConfig = WeatherUpdateConfiguration.batteryOptimized
         
         // Rucking optimized should have more frequent updates
-        XCTAssertLessThan(ruckingConfig.updateInterval, batteryConfig.updateInterval)
-        XCTAssertLessThan(ruckingConfig.backgroundUpdateInterval, batteryConfig.backgroundUpdateInterval)
-        XCTAssertLessThan(ruckingConfig.cacheExpirationTime, batteryConfig.cacheExpirationTime)
-        XCTAssertGreaterThan(ruckingConfig.maxCacheSize, batteryConfig.maxCacheSize)
-        XCTAssertLessThan(ruckingConfig.significantDistanceThreshold, batteryConfig.significantDistanceThreshold)
+        #expect(ruckingConfig.updateInterval < batteryConfig.updateInterval)
+        #expect(ruckingConfig.backgroundUpdateInterval < batteryConfig.backgroundUpdateInterval)
+        #expect(ruckingConfig.cacheExpirationTime < batteryConfig.cacheExpirationTime)
+        #expect(ruckingConfig.maxCacheSize > batteryConfig.maxCacheSize)
+        #expect(ruckingConfig.significantDistanceThreshold < batteryConfig.significantDistanceThreshold)
     }
     
     // MARK: - Integration Tests
