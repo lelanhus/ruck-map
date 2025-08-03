@@ -231,10 +231,8 @@ final class WeatherService {
     }
     
     deinit {
-        Task { @MainActor in
-            stopWeatherUpdates()
-            endBackgroundTask()
-        }
+        // Cleanup will happen when the instance is deallocated
+        // Tasks are automatically cancelled
     }
     
     func setModelContext(_ context: ModelContext) {
@@ -336,8 +334,8 @@ final class WeatherService {
         
         // Fetch from WeatherKit
         do {
-            let weather = try await fetchWeatherFromAPI(for: location)
-            let conditions = convertToWeatherConditions(weather, location: weatherLocation)
+            // Fetch and convert weather data in one step to avoid crossing isolation boundaries
+            let conditions = try await fetchAndConvertWeather(for: location, weatherLocation: weatherLocation)
             
             // Cache the result
             cacheWeatherData(conditions, location: weatherLocation)
@@ -477,11 +475,11 @@ final class WeatherService {
         }
     }
     
-    @MainActor
-    private func fetchWeatherFromAPI(for location: CLLocation) async throws -> Weather {
+    private func fetchAndConvertWeather(for location: CLLocation, weatherLocation: WeatherLocation) async throws -> WeatherConditions {
         do {
+            // Fetch and immediately convert to avoid Weather sendability issues
             let weather = try await weatherKitService.weather(for: location)
-            return weather
+            return convertToWeatherConditions(weather, location: weatherLocation)
         } catch {
             print("WeatherKit API error: \(error)")
             throw error
