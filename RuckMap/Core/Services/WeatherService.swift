@@ -231,8 +231,10 @@ final class WeatherService {
     }
     
     deinit {
-        stopWeatherUpdates()
-        endBackgroundTask()
+        Task { @MainActor in
+            stopWeatherUpdates()
+            endBackgroundTask()
+        }
     }
     
     func setModelContext(_ context: ModelContext) {
@@ -475,6 +477,7 @@ final class WeatherService {
         }
     }
     
+    @MainActor
     private func fetchWeatherFromAPI(for location: CLLocation) async throws -> Weather {
         do {
             let weather = try await weatherKitService.weather(for: location)
@@ -492,8 +495,8 @@ final class WeatherService {
             timestamp: Date(),
             temperature: currentWeather.temperature.value,
             humidity: currentWeather.humidity * 100, // Convert to percentage
-            windSpeed: currentWeather.wind.speed?.value ?? 0,
-            windDirection: currentWeather.wind.direction?.value ?? 0,
+            windSpeed: currentWeather.wind.speed.value,
+            windDirection: currentWeather.wind.direction.value,
             precipitation: 0, // CurrentWeather doesn't have precipitation - use forecast if needed
             pressure: currentWeather.pressure.value
         )
@@ -691,13 +694,15 @@ struct WeatherImpactAnalysis: Sendable {
         }
     }
     
-    static let neutral = WeatherImpactAnalysis(
-        temperatureImpact: .neutral,
-        windImpact: .neutral,
-        precipitationImpact: .neutral,
-        overallImpact: .neutral,
-        recommendations: ["Weather data unavailable"]
-    )
+    static let neutral = WeatherImpactAnalysis(conditions: WeatherConditions(
+        timestamp: Date(),
+        temperature: 20.0,
+        humidity: 50.0,
+        windSpeed: 0,
+        windDirection: 0,
+        precipitation: 0,
+        pressure: 1013.25
+    ))
     
     init(conditions: WeatherConditions) {
         // Temperature impact analysis
