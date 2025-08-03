@@ -8,6 +8,7 @@ struct ActiveTrackingView: View {
     @Environment(\.modelContext)
     private var modelContext
     @State private var showEndConfirmation = false
+    @State private var showSaveError = false
     @State private var currentGrade: Double = 0.0
     @State private var totalElevationGain: Double = 0.0
     @State private var totalElevationLoss: Double = 0.0
@@ -30,9 +31,11 @@ struct ActiveTrackingView: View {
         guard locationManager.currentPace > 0 else {
             return "--:--"
         }
-        let minutes = Int(locationManager.currentPace)
-        let seconds = Int((locationManager.currentPace - Double(minutes)) * 60)
-        return String(format: "%d:%02d /mi", Int(locationManager.currentPace * 1.60934), seconds)
+        // Convert pace from min/km to min/mi
+        let paceInMinPerMile = locationManager.currentPace * 1.60934
+        let minutes = Int(paceInMinPerMile)
+        let seconds = Int((paceInMinPerMile - Double(minutes)) * 60)
+        return String(format: "%d:%02d /mi", minutes, seconds)
     }
 
     private var formattedDuration: String {
@@ -304,11 +307,12 @@ struct ActiveTrackingView: View {
 
                     // Load weight card
                     if let session = locationManager.currentSession {
-                        MetricCard(
-                            title: "LOAD",
-                            value: String(format: "%.0f lbs", session.loadWeight * 2.20462),
-                            icon: "backpack",
-                            color: .purple
+                        LoadWeightCard(
+                            currentWeight: session.loadWeight,
+                            onAdjustTapped: {
+                                triggerHapticFeedback(.light)
+                                showLoadWeightAdjustment = true
+                            }
                         )
                     }
 
@@ -370,6 +374,7 @@ struct ActiveTrackingView: View {
             VStack(spacing: 15) {
                 // Pause/Resume button
                 Button(action: {
+                    triggerHapticFeedback(.impact)
                     locationManager.togglePause()
                 }) {
                     HStack {
@@ -393,6 +398,7 @@ struct ActiveTrackingView: View {
 
                 // Stop button
                 Button(action: {
+                    triggerHapticFeedback(.warning)
                     showEndConfirmation = true
                 }) {
                     HStack {
@@ -422,14 +428,26 @@ struct ActiveTrackingView: View {
             Button("Cancel", role: .cancel) {}
             Button("End", role: .destructive) {
                 locationManager.stopTracking()
-                try? modelContext.save()
+                do {
+                    try modelContext.save()
+                } catch {
+                    // Log error - in production app, show user-friendly error
+                    showSaveError = true
+                }
             }
         } message: {
             Text("Are you sure you want to end this ruck session?")
         }
-        .task {
+        .alert("Save Error", isPresented: $showSaveError) {
+            Button("OK") {}
+        } message: {
+            Text("Failed to save ruck session. Please try again.")
+        }
+        .task { [weak locationManager] in
             // Medium-frequency updates for elevation and GPS
             while !Task.isCancelled {
+                guard let locationManager else { break }
+
                 totalElevationGain = locationManager.elevationManager.elevationGain
                 totalElevationLoss = locationManager.elevationManager.elevationLoss
                 currentGrade = locationManager.elevationManager.currentGrade
@@ -440,6 +458,38 @@ struct ActiveTrackingView: View {
                 }
 
                 try? await Task.sleep(for: .seconds(2))
+            }
+        }
+        .onAppear {
+            setupHaptics()
+            startAnimations()
+        }
+        .onDisappear {
+            // Ensure haptic engine is properly stopped
+            hapticEngine?.stop()
+            hapticEngine = nil
+        }
+        .sheet(isPresented: $showLoadWeightAdjustment) {
+            if let session = locationManager.currentSession {
+                LoadWeightAdjustmentView(
+                    currentWeight: session.loadWeight,
+                    onSave: { newWeight in
+                        triggerHapticFeedback(.success)
+                        updateLoadWeight(newWeight)
+                        showLoadWeightAdjustment = false
+                    },
+                    onCancel: {
+                        triggerHapticFeedback(.light)
+                        showLoadWeightAdjustment = false
+                    }
+                )
+            }
+        }
+        .task {
+            // High-frequency UI updates for 60fps
+            while !Task.isCancelled {
+                await updateAnimatedMetrics()
+                try? await Task.sleep(for: .milliseconds(16))
             }
         }
     }
@@ -466,14 +516,32 @@ struct ActiveTrackingView: View {
 
     private func setupHaptics() {
         guard CHHapticEngine.capabilitiesForHardware().supportsHaptics else {
+            // Device doesn't support haptics - gracefully degrade
             return
         }
 
         do {
             hapticEngine = try CHHapticEngine()
             try hapticEngine?.start()
+
+            // Set up handlers for engine reset
+            hapticEngine?.resetHandler = { [weak self] in
+                // Attempt to restart the engine
+                do {
+                    try self?.hapticEngine?.start()
+                } catch {
+                    // Haptics unavailable - continue without them
+                    self?.hapticEngine = nil
+                }
+            }
+
+            hapticEngine?.stoppedHandler = { _ in
+                // Engine stopped - haptics will be unavailable
+                // In production, could log this for debugging
+            }
         } catch {
-            // Failed to start haptic engine
+            // Failed to start haptic engine - continue without haptics
+            hapticEngine = nil
         }
     }
 
@@ -634,15 +702,15 @@ struct LoadWeightAdjustmentView: View {
                         .foregroundColor(.purple)
 
                     HStack {
-                        Text("0 lbs")
+                        Text("5 lbs")
                             .font(.caption)
                             .foregroundColor(.secondary)
 
                         Slider(
                             value: $weight,
-                            in: 0 ... 68,
+                            in: 2.27 ... 68,
                             step: 2.27
-                        ) // 0-150 lbs in 5 lb increments
+                        ) // 5-150 lbs in 5 lb increments
                         .tint(.purple)
 
                         Text("150 lbs")
@@ -661,9 +729,12 @@ struct LoadWeightAdjustmentView: View {
 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Save") {
-                        onSave(weight)
+                        // Validate weight is realistic (at least 5 lbs / 2.27 kg)
+                        let validatedWeight = max(2.27, weight)
+                        onSave(validatedWeight)
                     }
                     .fontWeight(.semibold)
+                    .disabled(weight < 2.27) // Disable if less than 5 lbs
                 }
             }
             .navigationTitle("Load Weight")
