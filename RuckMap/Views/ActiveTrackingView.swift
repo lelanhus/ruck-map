@@ -9,6 +9,7 @@ struct ActiveTrackingView: View {
     @State private var currentGrade: Double = 0.0
     @State private var totalElevationGain: Double = 0.0
     @State private var totalElevationLoss: Double = 0.0
+    @AppStorage("showCalorieImpact") private var showCalorieImpact = true
     
     private var formattedDistance: String {
         let miles = locationManager.totalDistance / 1609.34
@@ -60,6 +61,12 @@ struct ActiveTrackingView: View {
     private var formattedCalorieBurnRate: String {
         let rate = locationManager.currentCalorieBurnRate
         return String(format: "%.1f cal/min", rate)
+    }
+    
+    private var weatherImpactPercentage: Int {
+        guard let conditions = locationManager.currentWeatherConditions else { return 0 }
+        let adjustmentFactor = conditions.temperatureAdjustmentFactor
+        return Int((adjustmentFactor - 1.0) * 100)
     }
     
     private var gradeColor: Color {
@@ -228,6 +235,20 @@ struct ActiveTrackingView: View {
                     .padding(.horizontal)
                     .padding(.top, 2)
                 }
+                
+                // Weather alerts
+                ForEach(locationManager.weatherAlerts, id: \.title) { alert in
+                    HStack {
+                        Image(systemName: weatherAlertIcon(alert.severity))
+                            .font(.caption2)
+                        Text(alert.title)
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                    }
+                    .foregroundColor(weatherAlertColor(alert.severity))
+                    .padding(.horizontal)
+                    .padding(.top, 2)
+                }
             }
             .padding(.vertical, 8)
             .background(Color(.systemGray6))
@@ -279,11 +300,12 @@ struct ActiveTrackingView: View {
                     
                     // Calorie metrics row
                     HStack(spacing: 12) {
-                        MetricCard(
+                        CalorieMetricCard(
                             title: "CALORIES",
                             value: formattedCalories,
                             icon: "flame.fill",
-                            color: .red
+                            color: .red,
+                            weatherImpact: showCalorieImpact ? weatherImpactPercentage : nil
                         )
                         
                         MetricCard(
@@ -308,6 +330,14 @@ struct ActiveTrackingView: View {
                             value: formattedElevationLoss,
                             icon: "arrow.down",
                             color: .red
+                        )
+                    }
+                    
+                    // Weather information
+                    if let weather = locationManager.currentWeatherConditions {
+                        WeatherCard(
+                            conditions: weather,
+                            showCalorieImpact: showCalorieImpact
                         )
                     }
                 }
@@ -376,6 +406,24 @@ struct ActiveTrackingView: View {
             }
         }
     }
+    
+    // MARK: - Helper Functions
+    
+    private func weatherAlertIcon(_ severity: WeatherAlertSeverity) -> String {
+        switch severity {
+        case .info: return "info.circle"
+        case .warning: return "exclamationmark.triangle"
+        case .critical: return "exclamationmark.octagon"
+        }
+    }
+    
+    private func weatherAlertColor(_ severity: WeatherAlertSeverity) -> Color {
+        switch severity {
+        case .info: return .blue
+        case .warning: return .orange
+        case .critical: return .red
+        }
+    }
 }
 
 struct MetricCard: View {
@@ -437,6 +485,137 @@ struct ElevationMetricCard: View {
         .background(Color(.systemBackground))
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 3, x: 0, y: 1)
+    }
+}
+
+struct CalorieMetricCard: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
+    let weatherImpact: Int?
+    
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.title2)
+                    .foregroundColor(color)
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(title)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.secondary)
+                    
+                    // Weather impact indicator
+                    if let impact = weatherImpact, impact != 0 {
+                        HStack(spacing: 2) {
+                            Image(systemName: "cloud.fill")
+                                .font(.caption2)
+                                .foregroundColor(.blue)
+                            Text("\(impact >= 0 ? "+" : "")\(impact)%")
+                                .font(.caption2)
+                                .fontWeight(.medium)
+                                .foregroundColor(impact > 0 ? .orange : .green)
+                        }
+                    }
+                }
+            }
+            
+            Text(value)
+                .font(.system(size: 36, weight: .bold, design: .rounded))
+                .foregroundColor(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(15)
+        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+    }
+}
+
+// MARK: - Weather Card Component
+
+struct WeatherCard: View {
+    let conditions: WeatherConditions
+    let showCalorieImpact: Bool
+    
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Image(systemName: "cloud.fill")
+                    .font(.title3)
+                    .foregroundColor(.blue)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Weather")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.secondary)
+                    
+                    Text("\(Int(conditions.temperatureFahrenheit))°F")
+                        .font(.headline)
+                        .fontWeight(.bold)
+                }
+                
+                Spacer()
+                
+                if showCalorieImpact {
+                    calorieImpactBadge
+                }
+            }
+            
+            HStack(spacing: 16) {
+                weatherDetail(
+                    icon: "humidity.fill",
+                    value: "\(Int(conditions.humidity))%"
+                )
+                
+                weatherDetail(
+                    icon: "wind.circle.fill",
+                    value: "\(Int(conditions.windSpeedMPH)) mph"
+                )
+                
+                if let description = conditions.weatherDescription {
+                    Text(description.prefix(10))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(15)
+        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+    }
+    
+    private var calorieImpactBadge: some View {
+        let adjustmentFactor = conditions.temperatureAdjustmentFactor
+        let percentage = Int((adjustmentFactor - 1.0) * 100)
+        
+        return VStack(spacing: 2) {
+            Image(systemName: "flame.fill")
+                .font(.caption2)
+                .foregroundColor(.orange)
+            
+            Text("\(percentage >= 0 ? "+" : "")\(percentage)%")
+                .font(.caption2)
+                .fontWeight(.medium)
+                .foregroundColor(percentage > 0 ? .orange : .green)
+        }
+    }
+    
+    private func weatherDetail(icon: String, value: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.caption2)
+                .foregroundColor(.blue)
+            Text(value)
+                .font(.caption2)
+                .fontWeight(.medium)
+        }
     }
 }
 

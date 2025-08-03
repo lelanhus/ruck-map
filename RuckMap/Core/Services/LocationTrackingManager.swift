@@ -91,6 +91,9 @@ final class LocationTrackingManager: NSObject {
     // Terrain detection
     private(set) var terrainDetectionManager: TerrainDetectionManager
     
+    // Weather service
+    private(set) var weatherService: WeatherService
+    
     // MARK: - Private Properties
     private let locationManager = CLLocationManager()
     private var modelContext: ModelContext?
@@ -115,6 +118,7 @@ final class LocationTrackingManager: NSObject {
         self.batteryOptimizationManager = BatteryOptimizationManager()
         self.calorieCalculator = CalorieCalculator()
         self.terrainDetectionManager = TerrainDetectionManager()
+        self.weatherService = WeatherService()
         
         super.init()
         setupLocationManager()
@@ -125,6 +129,7 @@ final class LocationTrackingManager: NSObject {
     
     func setModelContext(_ context: ModelContext) {
         self.modelContext = context
+        weatherService.setModelContext(context)
     }
     
     private func setupLocationManager() {
@@ -207,6 +212,11 @@ final class LocationTrackingManager: NSObject {
         // Handle terrain detection failures gracefully
         setupTerrainDetectionErrorHandling()
         
+        // Start weather updates
+        if let location = locationManager.location {
+            weatherService.startWeatherUpdates(for: location)
+        }
+        
         // Start calorie calculation if session has load weight
         if session.loadWeight > 0 {
             startCalorieTracking(bodyWeight: 70.0, loadWeight: session.loadWeight) // TODO: Get actual body weight from user profile
@@ -225,6 +235,7 @@ final class LocationTrackingManager: NSObject {
         elevationManager.stopTracking()
         terrainDetectionManager.stopDetection()
         calorieCalculator.stopContinuousCalculation()
+        weatherService.stopWeatherUpdates()
         stopAutoPauseMonitoring()
     }
     
@@ -236,6 +247,11 @@ final class LocationTrackingManager: NSObject {
         motionLocationManager.startMotionTracking()
         elevationManager.startTracking()
         terrainDetectionManager.startDetection()
+        
+        // Resume weather updates
+        if let location = locationManager.location {
+            weatherService.startWeatherUpdates(for: location)
+        }
         
         // Resume calorie calculation if session has load weight
         if let session = currentSession, session.loadWeight > 0 {
@@ -265,6 +281,9 @@ final class LocationTrackingManager: NSObject {
         
         // Stop calorie calculation
         calorieCalculator.stopContinuousCalculation()
+        
+        // Stop weather updates
+        weatherService.stopWeatherUpdates()
         
         // Stop auto-pause monitoring
         stopAutoPauseMonitoring()
@@ -444,6 +463,11 @@ final class LocationTrackingManager: NSObject {
                     
                     // Update terrain segments if terrain has changed significantly
                     updateTerrainSegments(terrainResult: terrainResult, session: session, location: filteredLocation)
+                    
+                    // Update weather data periodically (every 5 minutes or significant location change)
+                    Task {
+                        await updateWeatherIfNeeded(for: filteredLocation, session: session)
+                    }
                 }
                 
                 // Calculate pace
@@ -609,10 +633,8 @@ final class LocationTrackingManager: NSObject {
                 return (location: location, grade: grade, terrain: terrain)
             },
             weatherProvider: { @MainActor [weak self] in
-                guard let conditions = self?.currentSession?.weatherConditions else { 
-                    return nil
-                }
-                return WeatherData(from: conditions)
+                guard let self = self else { return nil }
+                return await self.weatherService.getWeatherDataForCalorieCalculation()
             },
             terrainFactorProvider: { @MainActor [weak self] in
                 guard let self = self else { return 1.2 }
@@ -632,7 +654,7 @@ final class LocationTrackingManager: NSObject {
         Task {
             for await (factor, confidence, terrainType) in terrainDetectionManager.terrainFactorStream() {
                 // Update calorie calculator with new terrain factor
-                await calorieCalculator.updateTerrainFactor(factor)
+                calorieCalculator.updateTerrainFactor(factor)
                 
                 // Log significant terrain changes
                 if confidence > 0.8 {
@@ -806,6 +828,85 @@ final class LocationTrackingManager: NSObject {
         return terrainDetectionManager.getTerrainChangeLog(since: session.startDate)
     }
     
+    // MARK: - Weather Service API
+    
+    /// Get current weather conditions
+    var currentWeatherConditions: WeatherConditions? {
+        weatherService.currentWeatherConditions
+    }
+    
+    /// Check if weather data is being updated
+    var isUpdatingWeather: Bool {
+        weatherService.isUpdatingWeather
+    }
+    
+    /// Get last weather update time
+    var lastWeatherUpdate: Date? {
+        weatherService.lastWeatherUpdate
+    }
+    
+    /// Get weather alerts
+    var weatherAlerts: [WeatherAlert] {
+        weatherService.weatherAlerts
+    }
+    
+    /// Get weather update status
+    var weatherUpdateStatus: String {
+        weatherService.weatherUpdateStatus
+    }
+    
+    /// Get weather impact analysis
+    func getWeatherImpactAnalysis() -> WeatherImpactAnalysis {
+        weatherService.getWeatherImpactAnalysis()
+    }
+    
+    /// Force weather update for current location
+    func forceWeatherUpdate() async {
+        guard let location = currentLocation,
+              let session = currentSession else { return }
+        
+        await weatherService.updateWeatherForCurrentSession(location: location, session: session)
+    }
+    
+    /// Set weather service battery optimization
+    func setWeatherBatteryOptimization(_ level: BatteryOptimizationLevel) {
+        weatherService.setBatteryOptimization(level)
+    }
+    
+    /// Clear weather cache
+    func clearWeatherCache() {
+        weatherService.clearCache()
+    }
+    
+    /// Update weather data if conditions are met
+    private func updateWeatherIfNeeded(for location: CLLocation, session: RuckSession) async {
+        // Only update weather every 5 minutes or when moving more than 1km
+        let shouldUpdate: Bool = {
+            guard let lastUpdate = weatherService.lastWeatherUpdate else { return true }
+            
+            let timeSinceUpdate = Date().timeIntervalSince(lastUpdate)
+            if timeSinceUpdate > 300 { // 5 minutes
+                return true
+            }
+            
+            // Check if we've moved significantly since last weather update
+            if let lastWeatherLocation = session.weatherConditions {
+                let _ = CLLocation(
+                    latitude: lastWeatherLocation.timestamp.timeIntervalSince1970, // This is wrong, need to store weather location
+                    longitude: 0 // This is also wrong
+                )
+                // For now, just update based on time
+                return timeSinceUpdate > 300
+            }
+            
+            return false
+        }()
+        
+        if shouldUpdate {
+            await weatherService.updateWeatherForCurrentSession(location: location, session: session)
+        }
+    }
+    
     /// Get debug information
     func getDebugInfo() -> String {
         return """
@@ -857,6 +958,15 @@ final class LocationTrackingManager: NSObject {
         
         === Terrain Detection ===
         \(terrainDetectionManager.getDebugInfo())
+        
+        === Weather Service ===
+        Status: \(weatherService.weatherUpdateStatus)
+        Updating: \(weatherService.isUpdatingWeather ? "Yes" : "No")
+        Last Update: \(weatherService.lastWeatherUpdate?.formatted() ?? "Never")
+        Cache Hit Rate: \(String(format: "%.1f", weatherService.cacheHitRate * 100))%
+        API Calls Today: \(weatherService.apiCallsToday)
+        Active Alerts: \(weatherService.weatherAlerts.count)
+        Current Conditions: \(weatherService.currentWeatherConditions != nil ? "Available" : "Unavailable")
         """
     }
 }

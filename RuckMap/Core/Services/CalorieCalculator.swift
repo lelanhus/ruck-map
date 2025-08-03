@@ -57,6 +57,15 @@ struct WeatherData: Sendable {
     }
 }
 
+// MARK: - WeatherData Extension for WeatherConditions
+extension WeatherData {
+    init(from conditions: WeatherConditions) {
+        self.temperature = conditions.temperature
+        self.windSpeed = conditions.windSpeed
+        self.humidity = conditions.humidity
+    }
+}
+
 // MARK: - Calculation Input Parameters
 /// Environmental and physiological parameters for calorie calculation
 struct CalorieCalculationParameters: Sendable {
