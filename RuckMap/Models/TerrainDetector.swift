@@ -139,11 +139,6 @@ final class TerrainDetector {
         }
     }
     
-    deinit {
-        Task { @MainActor in
-            stopDetection()
-        }
-    }
     
     // MARK: - Public Interface
     

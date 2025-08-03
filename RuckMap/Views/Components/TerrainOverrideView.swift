@@ -23,11 +23,12 @@ struct ArmyGreenDesign {
     
     // Hierarchical variations
     static let textPrimary = primary
-    static let textSecondary = primary.secondary
-    static let textTertiary = primary.tertiary
+    static let textSecondary = secondary
+    static let textTertiary = tertiary
 }
 
 /// Terrain Override State Manager
+@MainActor
 @Observable
 final class TerrainOverrideState {
     var isOverrideActive: Bool = false
@@ -639,6 +640,7 @@ struct TerrainFactorView: View {
 // MARK: - Compatibility Layer
 
 /// Compatibility adapter for the existing LocationTrackingManager
+@MainActor
 struct TerrainDetectorAdapter {
     let locationManager: LocationTrackingManager
     
@@ -656,6 +658,7 @@ struct TerrainDetectorAdapter {
 }
 
 /// Compatibility terrain override state for existing LocationTrackingManager
+@MainActor
 @Observable
 final class TerrainOverrideCompatState {
     private let locationManager: LocationTrackingManager

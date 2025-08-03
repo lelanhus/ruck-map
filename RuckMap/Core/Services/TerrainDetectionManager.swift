@@ -78,11 +78,6 @@ final class TerrainDetectionManager {
         setupMotionManager()
     }
     
-    deinit {
-        Task { @MainActor in
-            stopDetection()
-        }
-    }
     
     private func setupMotionManager() {
         motionManager.accelerometerUpdateInterval = 1.0/30.0 // 30Hz
@@ -310,7 +305,7 @@ final class TerrainDetectionManager {
         // Check for nearby map features
         let point = mapView.convert(location.coordinate, toPointTo: mapView)
         let rect = CGRect(x: point.x - 25, y: point.y - 25, width: 50, height: 50)
-        let region = mapView.convert(CGPoint(x: rect.midX, y: rect.midY), toCoordinateFrom: mapView)
+        _ = mapView.convert(CGPoint(x: rect.midX, y: rect.midY), toCoordinateFrom: mapView)
         
         // This is a simplified analysis - could be enhanced with actual map overlay checking
         // For now, use coordinate-based heuristics
@@ -340,21 +335,21 @@ final class TerrainDetectionManager {
             
             // Combine results if both have reasonable confidence
             if result.confidence > 0.5 && mapViewResult.confidence > 0.5 {
-                if result.terrainType == mapViewResult.terrainType {
+                if result.terrain == mapViewResult.terrainType {
                     // Agreement - boost confidence
-                    return (terrainType: result.terrainType, confidence: min(1.0, (result.confidence + mapViewResult.confidence) / 2.0 + 0.1))
+                    return (terrainType: result.terrain, confidence: min(1.0, (result.confidence + mapViewResult.confidence) / 2.0 + 0.1))
                 } else {
                     // Disagreement - favor the dedicated analyzer
-                    return (terrainType: result.terrainType, confidence: result.confidence * 0.9)
+                    return (terrainType: result.terrain, confidence: result.confidence * 0.9)
                 }
             } else if result.confidence > mapViewResult.confidence {
-                return (terrainType: result.terrainType, confidence: result.confidence)
+                return (terrainType: result.terrain, confidence: result.confidence)
             } else {
                 return (terrainType: mapViewResult.terrainType, confidence: mapViewResult.confidence)
             }
         }
         
-        return (terrainType: result.terrainType, confidence: result.confidence)
+        return (terrainType: result.terrain, confidence: result.confidence)
     }
     
     private func analyzeCoordinateContext(coordinate: CLLocationCoordinate2D) -> (terrainType: TerrainType, confidence: Double) {
@@ -395,7 +390,7 @@ final class TerrainDetectionManager {
         }
         
         // Check locality type
-        if let locality = placemark.locality {
+        if placemark.locality != nil {
             // Urban areas likely have paved surfaces
             return (.pavedRoad, confidence * 0.8)
         }

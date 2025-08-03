@@ -103,17 +103,16 @@ final class MapKitTerrainAnalyzer {
     
     private func analyzeGeocodingData(location: CLLocation) async -> (terrain: TerrainType, confidence: Double) {
         
-        let geocoder = CLGeocoder()
-        
         do {
             // Use timeout to prevent hanging
             let placemarks = try await withThrowingTaskGroup(of: [CLPlacemark].self) { group in
-                group.addTask {
-                    try await geocoder.reverseGeocodeLocation(location)
+                group.addTask { @Sendable in
+                    let geocoder = CLGeocoder()
+                    return try await geocoder.reverseGeocodeLocation(location)
                 }
                 
                 // Add timeout task
-                group.addTask {
+                group.addTask { @Sendable in
                     try await Task.sleep(for: .seconds(Config.requestTimeout))
                     throw CancellationError()
                 }
@@ -141,7 +140,7 @@ final class MapKitTerrainAnalyzer {
     
     private func classifyFromPlacemark(_ placemark: CLPlacemark) -> (terrain: TerrainType, confidence: Double) {
         
-        var confidence: Double = 0.6
+        let confidence: Double = 0.6
         
         // Analyze thoroughfare (streets/roads)
         if let thoroughfare = placemark.thoroughfare?.lowercased() {
@@ -236,7 +235,7 @@ final class MapKitTerrainAnalyzer {
         }
         
         // Ocean proximity might indicate sand
-        if let ocean = placemark.ocean {
+        if placemark.ocean != nil {
             return (.sand, confidence * 0.5)
         }
         
