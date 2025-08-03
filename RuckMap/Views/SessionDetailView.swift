@@ -20,6 +20,11 @@ struct SessionDetailView: View {
                 // Metrics Cards
                 metricsSection
                 
+                // Weather information (if available)
+                if let weatherConditions = session.weatherConditions {
+                    weatherSummarySection(weatherConditions)
+                }
+                
                 // Elevation Profile
                 if !session.locationPoints.isEmpty {
                     ElevationProfileView(
@@ -146,6 +151,84 @@ struct SessionDetailView: View {
         .background(Color(.tertiarySystemBackground))
         .cornerRadius(12)
         .padding(.horizontal)
+    }
+    
+    private func weatherSummarySection(_ conditions: WeatherConditions) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Weather Conditions")
+                .font(.headline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal)
+            
+            // Inline weather display
+            VStack(spacing: 16) {
+                HStack {
+                    Image(systemName: "cloud.fill")
+                        .font(.title2)
+                        .foregroundStyle(.blue)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Weather During Session")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        
+                        if let description = conditions.weatherDescription {
+                            Text(description.capitalized)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    Text(formatWeatherTime(conditions.timestamp))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                
+                HStack(spacing: 20) {
+                    weatherMetric(
+                        title: "Temperature",
+                        value: "\(Int(conditions.temperatureFahrenheit))°F",
+                        icon: "thermometer"
+                    )
+                    
+                    weatherMetric(
+                        title: "Humidity",
+                        value: "\(Int(conditions.humidity))%",
+                        icon: "humidity"
+                    )
+                    
+                    weatherMetric(
+                        title: "Wind",
+                        value: "\(Int(conditions.windSpeedMPH)) mph",
+                        icon: "wind"
+                    )
+                }
+                
+                // Weather impact on calories
+                if conditions.temperatureAdjustmentFactor != 1.0 {
+                    let impact = Int((conditions.temperatureAdjustmentFactor - 1.0) * 100)
+                    HStack {
+                        Image(systemName: "flame.fill")
+                            .foregroundStyle(.orange)
+                        Text("Weather Impact on Calories:")
+                        Spacer()
+                        Text("\(impact >= 0 ? "+" : "")\(impact)%")
+                            .fontWeight(.medium)
+                            .foregroundStyle(impact > 0 ? .orange : .green)
+                    }
+                    .font(.caption)
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
+                }
+            }
+            .padding()
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(12)
+            .padding(.horizontal)
+        }
     }
     
     private var exportActionsSection: some View {
@@ -287,6 +370,26 @@ struct SessionDetailView: View {
             let shareManager = ShareManager()
             await shareManager.shareSession(sessionId: session.id, format: .gpx, dataCoordinator: dataCoordinator)
         }
+    }
+    
+    private func weatherMetric(title: String, value: String, icon: String) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundStyle(.blue)
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.caption)
+                .fontWeight(.medium)
+        }
+    }
+    
+    private func formatWeatherTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
     }
 }
 
