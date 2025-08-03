@@ -5,6 +5,7 @@ import Speech
 import AVFoundation
 
 @Observable
+@MainActor
 class SessionSummaryViewModel {
     var rpe: Int = 5
     var notes: String = ""
@@ -66,8 +67,8 @@ class SessionSummaryViewModel {
         let inputNode = audioEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
         
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
-            recognitionRequest.append(buffer)
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak recognitionRequest] buffer, _ in
+            recognitionRequest?.append(buffer)
         }
         
         audioEngine.prepare()
@@ -78,13 +79,13 @@ class SessionSummaryViewModel {
         // Start recognition
         recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
             if let result = result {
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     self?.notes = result.bestTranscription.formattedString
                 }
             }
             
             if error != nil || result?.isFinal == true {
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     self?.stopVoiceRecording()
                 }
             }
@@ -133,6 +134,19 @@ class SessionSummaryViewModel {
         shareURL = try await dataCoordinator.exportSession(sessionId: session.id, format: .gpx)
         showingShareSheet = true
     }
+    
+    deinit {
+        // Clean up audio resources
+        if isRecording {
+            stopVoiceRecording()
+        }
+        
+        // Clean up speech recognition resources
+        speechRecognizer.delegate = nil
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recognitionRequest = nil
+    }
 }
 
 enum VoiceRecordingError: LocalizedError {
@@ -151,6 +165,19 @@ enum VoiceRecordingError: LocalizedError {
             return "Failed to create speech recognition request"
         case .audioEngineError:
             return "Audio engine error"
+        }
+    }
+    
+    var recoverySuggestion: String? {
+        switch self {
+        case .speechRecognizerUnavailable:
+            return "Please ensure your device supports speech recognition and that you have an active internet connection."
+        case .authorizationDenied:
+            return "Go to Settings > Privacy & Security > Speech Recognition to enable access for RuckMap."
+        case .recognitionRequestFailed:
+            return "Please try again. If the problem persists, restart the app."
+        case .audioEngineError:
+            return "Check that no other apps are using the microphone and try again."
         }
     }
 }
