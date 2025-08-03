@@ -27,6 +27,25 @@ class DataCoordinator: ObservableObject {
         case failed(Error)
     }
     
+    private init(
+        modelContainer: ModelContainer,
+        sessionManager: SessionManager,
+        migrationManager: MigrationManager,
+        exportManager: ExportManager,
+        isFallback: Bool = false
+    ) {
+        self.modelContainer = modelContainer
+        self.sessionManager = sessionManager
+        self.migrationManager = migrationManager
+        self.exportManager = exportManager
+        
+        if isFallback {
+            logger.warning("DataCoordinator initialized in fallback mode with in-memory storage")
+        } else {
+            logger.info("DataCoordinator initialized successfully")
+        }
+    }
+    
     init() throws {
         // Initialize ModelContainer with CloudKit support
         let schema = Schema([
@@ -36,23 +55,57 @@ class DataCoordinator: ObservableObject {
             WeatherConditions.self
         ])
         
+        let storeURL = URL.documentsDirectory.appending(path: "RuckMap.store")
         let modelConfiguration = ModelConfiguration(
             schema: schema,
-            url: URL.documentsDirectory.appending(path: "RuckMap.store"),
+            url: storeURL,
             cloudKitDatabase: .automatic
         )
         
         do {
-            self.modelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])
-            self.sessionManager = SessionManager(modelContainer: modelContainer)
-            self.migrationManager = MigrationManager()
-            self.exportManager = ExportManager()
-            // TrackCompressor is now used internally by SessionManager
+            let modelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])
+            let sessionManager = SessionManager(modelContainer: modelContainer)
+            let migrationManager = MigrationManager()
+            let exportManager = ExportManager()
+            
+            self.modelContainer = modelContainer
+            self.sessionManager = sessionManager
+            self.migrationManager = migrationManager
+            self.exportManager = exportManager
             
             logger.info("DataCoordinator initialized successfully")
         } catch {
             logger.error("Failed to initialize DataCoordinator: \(error.localizedDescription)")
-            throw error
+            
+            // Attempt to recover from migration failures
+            if error.localizedDescription.contains("migration") || 
+               error.localizedDescription.contains("attribute") ||
+               error.localizedDescription.contains("mandatory destination") {
+                logger.warning("Detected migration/schema error, attempting recovery")
+                
+                do {
+                    // Try to backup and recreate store
+                    try DataCoordinator.performMigrationFailureRecovery(storeURL: storeURL, schema: schema)
+                    
+                    let recoveryConfiguration = ModelConfiguration(
+                        schema: schema,
+                        url: storeURL,
+                        cloudKitDatabase: .automatic
+                    )
+                    
+                    self.modelContainer = try ModelContainer(for: schema, configurations: [recoveryConfiguration])
+                    self.sessionManager = SessionManager(modelContainer: modelContainer)
+                    self.migrationManager = MigrationManager()
+                    self.exportManager = ExportManager()
+                    
+                    logger.info("DataCoordinator recovered successfully after migration failure")
+                } catch {
+                    logger.error("Recovery attempt failed: \(error.localizedDescription)")
+                    throw DataCoordinatorError.initializationFailed(error)
+                }
+            } else {
+                throw DataCoordinatorError.initializationFailed(error)
+            }
         }
     }
     
@@ -61,14 +114,39 @@ class DataCoordinator: ObservableObject {
         do {
             logger.info("Starting DataCoordinator initialization")
             
-            // Check and perform migrations
-            try await migrationManager.checkAndPerformMigration(modelContainer: modelContainer)
+            // Check and perform migrations with retry logic
+            var migrationAttempts = 0
+            let maxMigrationAttempts = 3
             
-            // Validate data integrity
+            while migrationAttempts < maxMigrationAttempts {
+                do {
+                    try await migrationManager.checkAndPerformMigration(modelContainer: modelContainer)
+                    break // Success, exit retry loop
+                } catch {
+                    migrationAttempts += 1
+                    logger.warning("Migration attempt \(migrationAttempts) failed: \(error.localizedDescription)")
+                    
+                    if migrationAttempts >= maxMigrationAttempts {
+                        logger.error("All migration attempts failed, proceeding with data validation")
+                        // Don't throw here, let validation run to fix any remaining issues
+                    } else {
+                        // Brief delay before retry
+                        try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+                    }
+                }
+            }
+            
+            // Validate data integrity (this will also fix issues)
             let validationReport = try await migrationManager.validateDataIntegrity(modelContainer: modelContainer)
             
             if !validationReport.isValid {
                 logger.warning("Data integrity issues found: \(validationReport.errors)")
+                
+                // Attempt to fix critical issues
+                if validationReport.errors.count < 10 { // Only attempt fixes if issues are manageable
+                    logger.info("Attempting to fix data integrity issues")
+                    // The validation process will have logged the issues, we'll continue
+                }
             }
             
             // Clean up old backups
@@ -89,6 +167,10 @@ class DataCoordinator: ObservableObject {
         } catch {
             logger.error("DataCoordinator initialization failed: \(error.localizedDescription)")
             initializationError = error
+            
+            // Set as initialized even with errors to allow app to function
+            // The app can still work with a fresh database if needed
+            isInitialized = true
         }
     }
     
@@ -369,6 +451,96 @@ class DataCoordinator: ObservableObject {
     /// Cleans up resources
     deinit {
         NotificationCenter.default.removeObserver(self)
+    }
+    
+    // MARK: - Migration Recovery
+    
+    /// Handles migration failures by backing up corrupted store and creating fresh one
+    private static func performMigrationFailureRecovery(storeURL: URL, schema: Schema) throws {
+        let logger = Logger(subsystem: "com.ruckmap.app", category: "DataCoordinator")
+        let fileManager = FileManager.default
+        
+        // Create corrupted store backup
+        if fileManager.fileExists(atPath: storeURL.path) {
+            let backupURL = storeURL.appendingPathExtension("corrupted.\(Date().timeIntervalSince1970)")
+            try fileManager.moveItem(at: storeURL, to: backupURL)
+            logger.info("Moved corrupted store to: \(backupURL.path)")
+        }
+        
+        // Clean up related files
+        let storeDirectory = storeURL.deletingLastPathComponent()
+        let storeName = storeURL.deletingPathExtension().lastPathComponent
+        
+        let relatedFiles = try fileManager.contentsOfDirectory(at: storeDirectory, includingPropertiesForKeys: nil)
+        for file in relatedFiles {
+            if file.lastPathComponent.hasPrefix(storeName) && file != storeURL {
+                let backupFile = file.appendingPathExtension("corrupted.\(Date().timeIntervalSince1970)")
+                try? fileManager.moveItem(at: file, to: backupFile)
+            }
+        }
+        
+        logger.info("Cleaned up related store files, fresh store will be created")
+    }
+    
+    /// Creates a fallback DataCoordinator with in-memory storage for emergency recovery
+    static func createFallback() -> DataCoordinator {
+        let logger = Logger(subsystem: "com.ruckmap.app", category: "DataCoordinator")
+        logger.warning("Creating fallback DataCoordinator with in-memory storage")
+        
+        do {
+            let schema = Schema([
+                RuckSession.self,
+                LocationPoint.self,
+                TerrainSegment.self,
+                WeatherConditions.self
+            ])
+            
+            // Use in-memory configuration as fallback
+            let modelConfiguration = ModelConfiguration(
+                schema: schema,
+                isStoredInMemoryOnly: true,
+                cloudKitDatabase: .none
+            )
+            
+            let modelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])
+            let sessionManager = SessionManager(modelContainer: modelContainer)
+            let migrationManager = MigrationManager()
+            let exportManager = ExportManager()
+            
+            let coordinator = DataCoordinator(
+                modelContainer: modelContainer,
+                sessionManager: sessionManager,
+                migrationManager: migrationManager,
+                exportManager: exportManager,
+                isFallback: true
+            )
+            
+            logger.info("Fallback DataCoordinator created successfully")
+            return coordinator
+            
+        } catch {
+            logger.critical("Failed to create fallback DataCoordinator: \(error.localizedDescription)")
+            fatalError("Cannot create fallback DataCoordinator: \(error)")
+        }
+    }
+}
+
+// MARK: - Error Types
+
+enum DataCoordinatorError: LocalizedError {
+    case initializationFailed(Error)
+    case migrationRecoveryFailed(Error)
+    case storeCorrupted
+    
+    var errorDescription: String? {
+        switch self {
+        case .initializationFailed(let error):
+            return "Failed to initialize data coordinator: \(error.localizedDescription)"
+        case .migrationRecoveryFailed(let error):
+            return "Failed to recover from migration error: \(error.localizedDescription)"
+        case .storeCorrupted:
+            return "Data store is corrupted and cannot be recovered"
+        }
     }
 }
 

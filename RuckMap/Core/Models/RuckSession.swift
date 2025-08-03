@@ -6,15 +6,15 @@ final class RuckSession {
     var id: UUID
     var startDate: Date
     var endDate: Date?
-    var totalDistance: Double // meters
-    var totalDuration: TimeInterval
-    var loadWeight: Double // kg
-    var totalCalories: Double
-    var averagePace: Double // min/km
-    var elevationGain: Double // meters
-    var elevationLoss: Double // meters
-    var maxElevation: Double // meters
-    var minElevation: Double // meters
+    var totalDistance: Double = 0.0 // meters
+    var totalDuration: TimeInterval = 0.0
+    var loadWeight: Double = 0.0 // kg
+    var totalCalories: Double = 0.0
+    var averagePace: Double = 0.0 // min/km
+    var elevationGain: Double = 0.0 // meters
+    var elevationLoss: Double = 0.0 // meters
+    var maxElevation: Double = 0.0 // meters
+    var minElevation: Double = 0.0 // meters
     var averageGrade: Double = 0.0 // percentage
     var maxGrade: Double = 0.0 // percentage
     var minGrade: Double = 0.0 // percentage
@@ -25,16 +25,16 @@ final class RuckSession {
     var voiceNoteURL: URL?
     var createdAt: Date
     var modifiedAt: Date
-    var syncStatus: String // For offline sync management
-    var version: Int // For conflict resolution
+    var syncStatus: String = "pending" // For offline sync management
+    var version: Int = 1 // For conflict resolution
     
     // Real-time tracking properties
-    var distance: Double = 0 // alias for totalDistance
+    var distance: Double = 0.0 // alias for totalDistance
     var currentLatitude: Double?
     var currentLongitude: Double?
-    var currentElevation: Double = 0
-    var currentGrade: Double = 0
-    var currentPace: Double = 0
+    var currentElevation: Double = 0.0
+    var currentGrade: Double = 0.0
+    var currentPace: Double = 0.0
     
     @Relationship(deleteRule: .cascade)
     var locationPoints: [LocationPoint]

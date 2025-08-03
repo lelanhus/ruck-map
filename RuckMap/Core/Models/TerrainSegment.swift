@@ -72,12 +72,12 @@ enum TerrainType: String, CaseIterable, Codable, Sendable {
 
 @Model
 final class TerrainSegment {
-    var startTime: Date
-    var endTime: Date
-    var terrainTypeRaw: String
-    var grade: Double // percentage
-    var confidence: Double // 0.0 to 1.0
-    var isManuallySet: Bool
+    var startTime: Date = Date()
+    var endTime: Date = Date()
+    var terrainTypeRaw: String = "paved_road"
+    var grade: Double = 0.0 // percentage
+    var confidence: Double = 0.8 // 0.0 to 1.0
+    var isManuallySet: Bool = false
     
     @Relationship(inverse: \RuckSession.terrainSegments)
     var session: RuckSession?

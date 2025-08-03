@@ -3,13 +3,13 @@ import SwiftData
 
 @Model
 final class WeatherConditions {
-    var timestamp: Date
-    var temperature: Double // Celsius
-    var humidity: Double // percentage (0-100)
-    var windSpeed: Double // m/s
-    var windDirection: Double // degrees
-    var precipitation: Double // mm/hr
-    var pressure: Double // hPa
+    var timestamp: Date = Date()
+    var temperature: Double = 20.0 // Celsius
+    var humidity: Double = 50.0 // percentage (0-100)
+    var windSpeed: Double = 0.0 // m/s
+    var windDirection: Double = 0.0 // degrees
+    var precipitation: Double = 0.0 // mm/hr
+    var pressure: Double = 1013.25 // hPa
     var weatherDescription: String?
     var conditionCode: String? // WeatherKit condition code
     

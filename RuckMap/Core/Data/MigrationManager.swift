@@ -33,15 +33,49 @@ actor MigrationManager {
         logger.info("Current stored schema version: \(currentStoredVersion)")
         logger.info("Target schema version: \(Self.currentSchemaVersion)")
         
-        if currentStoredVersion < Self.currentSchemaVersion {
-            logger.info("Migration needed from version \(currentStoredVersion) to \(Self.currentSchemaVersion)")
-            try await performMigration(
-                from: currentStoredVersion,
-                to: Self.currentSchemaVersion,
-                modelContainer: modelContainer
-            )
-        } else {
-            logger.info("No migration needed")
+        do {
+            if currentStoredVersion < Self.currentSchemaVersion {
+                logger.info("Migration needed from version \(currentStoredVersion) to \(Self.currentSchemaVersion)")
+                try await performMigration(
+                    from: currentStoredVersion,
+                    to: Self.currentSchemaVersion,
+                    modelContainer: modelContainer
+                )
+            } else {
+                logger.info("No migration needed, performing data integrity check")
+                // Even if no migration is needed, ensure data integrity
+                let _ = try await fixMissingAttributeValues(modelContainer: modelContainer)
+            }
+        } catch {
+            // Log the specific error details for debugging
+            let errorString = error.localizedDescription
+            logger.error("Migration check failed: \(errorString)")
+            
+            // Check if this is an attribute validation error
+            if errorString.contains("missing attribute values") || 
+               errorString.contains("mandatory destination attribute") {
+                logger.warning("Detected attribute validation error, attempting to fix missing values")
+                
+                // Try to fix the issue before rethrowing
+                do {
+                    let fixedCount = try await fixMissingAttributeValues(modelContainer: modelContainer)
+                    logger.info("Fixed \(fixedCount) records with missing attributes, retrying migration")
+                    
+                    // Retry migration after fixing attributes
+                    if currentStoredVersion < Self.currentSchemaVersion {
+                        try await performMigration(
+                            from: currentStoredVersion,
+                            to: Self.currentSchemaVersion,
+                            modelContainer: modelContainer
+                        )
+                    }
+                } catch {
+                    logger.error("Failed to fix attribute validation issues: \(error.localizedDescription)")
+                    throw MigrationError.attributeValidationFailed(errorString)
+                }
+            } else {
+                throw error
+            }
         }
     }
     
@@ -111,6 +145,10 @@ actor MigrationManager {
             
             // Create a backup before migration
             try await createBackup(modelContainer: modelContainer)
+            
+            // Fix any missing attribute values before migration
+            let fixedRecords = try await fixMissingAttributeValues(modelContainer: modelContainer)
+            recordsAffected += fixedRecords
             
             // Perform version-specific migrations
             for version in (fromVersion + 1)...toVersion {
@@ -274,6 +312,137 @@ actor MigrationManager {
         return latestBackup
     }
     
+    // MARK: - Attribute Value Fixes
+    
+    /// Fixes missing attribute values that could cause migration failures
+    private func fixMissingAttributeValues(modelContainer: ModelContainer) async throws -> Int {
+        let context = ModelContext(modelContainer)
+        var recordsFixed = 0
+        
+        logger.info("Checking for missing attribute values")
+        
+        // Fix RuckSession records with missing values
+        let sessionDescriptor = FetchDescriptor<RuckSession>()
+        let sessions = try context.fetch(sessionDescriptor)
+        
+        for session in sessions {
+            var needsSave = false
+            
+            // Ensure elevation values have defaults
+            if session.maxElevation.isNaN || session.maxElevation.isInfinite {
+                session.maxElevation = 0.0
+                needsSave = true
+            }
+            
+            if session.minElevation.isNaN || session.minElevation.isInfinite {
+                session.minElevation = 0.0
+                needsSave = true
+            }
+            
+            // Ensure other numeric values have defaults
+            if session.totalDistance.isNaN || session.totalDistance.isInfinite {
+                session.totalDistance = 0.0
+                needsSave = true
+            }
+            
+            if session.elevationGain.isNaN || session.elevationGain.isInfinite {
+                session.elevationGain = 0.0
+                needsSave = true
+            }
+            
+            if session.elevationLoss.isNaN || session.elevationLoss.isInfinite {
+                session.elevationLoss = 0.0
+                needsSave = true
+            }
+            
+            if session.totalCalories.isNaN || session.totalCalories.isInfinite {
+                session.totalCalories = 0.0
+                needsSave = true
+            }
+            
+            if session.averagePace.isNaN || session.averagePace.isInfinite {
+                session.averagePace = 0.0
+                needsSave = true
+            }
+            
+            if session.loadWeight.isNaN || session.loadWeight.isInfinite {
+                session.loadWeight = 0.0
+                needsSave = true
+            }
+            
+            // Ensure string values have defaults
+            if session.syncStatus.isEmpty {
+                session.syncStatus = "pending"
+                needsSave = true
+            }
+            
+            // Ensure version is valid
+            if session.version <= 0 {
+                session.version = 1
+                needsSave = true
+            }
+            
+            if needsSave {
+                recordsFixed += 1
+            }
+        }
+        
+        // Fix LocationPoint records with missing values
+        let pointDescriptor = FetchDescriptor<LocationPoint>()
+        let points = try context.fetch(pointDescriptor)
+        
+        for point in points {
+            var needsSave = false
+            
+            if point.latitude.isNaN || point.latitude.isInfinite || abs(point.latitude) > 90 {
+                point.latitude = 0.0
+                needsSave = true
+            }
+            
+            if point.longitude.isNaN || point.longitude.isInfinite || abs(point.longitude) > 180 {
+                point.longitude = 0.0
+                needsSave = true
+            }
+            
+            if point.altitude.isNaN || point.altitude.isInfinite {
+                point.altitude = 0.0
+                needsSave = true
+            }
+            
+            if point.horizontalAccuracy.isNaN || point.horizontalAccuracy.isInfinite {
+                point.horizontalAccuracy = 0.0
+                needsSave = true
+            }
+            
+            if point.verticalAccuracy.isNaN || point.verticalAccuracy.isInfinite {
+                point.verticalAccuracy = 0.0
+                needsSave = true
+            }
+            
+            if point.speed.isNaN || point.speed.isInfinite || point.speed < 0 {
+                point.speed = 0.0
+                needsSave = true
+            }
+            
+            if point.course.isNaN || point.course.isInfinite || point.course < 0 {
+                point.course = 0.0
+                needsSave = true
+            }
+            
+            if needsSave {
+                recordsFixed += 1
+            }
+        }
+        
+        // Save all changes if needed
+        if recordsFixed > 0 {
+            try context.save()
+            logger.info("Fixed \(recordsFixed) records with missing or invalid attribute values")
+        }
+        
+        return recordsFixed
+    }
+    
     // MARK: - Data Integrity Validation
     
     /// Validates data integrity after migration
@@ -371,6 +540,8 @@ enum MigrationError: LocalizedError {
     case noStoreURL
     case noBackupFound
     case invalidVersion(Int)
+    case attributeValidationFailed(String)
+    case dataCorrupted(String)
     
     var errorDescription: String? {
         switch self {
@@ -382,6 +553,10 @@ enum MigrationError: LocalizedError {
             return "No backup file found for restoration"
         case .invalidVersion(let version):
             return "Invalid schema version: \(version)"
+        case .attributeValidationFailed(let attribute):
+            return "Attribute validation failed for: \(attribute). Missing mandatory values detected."
+        case .dataCorrupted(let details):
+            return "Data corruption detected: \(details)"
         }
     }
 }

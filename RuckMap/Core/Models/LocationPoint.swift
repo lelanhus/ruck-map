@@ -4,14 +4,14 @@ import CoreLocation
 
 @Model
 final class LocationPoint {
-    var timestamp: Date
-    var latitude: Double
-    var longitude: Double
-    var altitude: Double
-    var horizontalAccuracy: Double
-    var verticalAccuracy: Double
-    var speed: Double // m/s
-    var course: Double // degrees
+    var timestamp: Date = Date()
+    var latitude: Double = 0.0
+    var longitude: Double = 0.0
+    var altitude: Double = 0.0
+    var horizontalAccuracy: Double = 0.0
+    var verticalAccuracy: Double = 0.0
+    var speed: Double = 0.0 // m/s
+    var course: Double = 0.0 // degrees
     var barometricAltitude: Double? // meters from barometer
     var fusedAltitude: Double? // meters from Kalman-filtered sensor fusion
     var elevationAccuracy: Double? // estimated accuracy in meters
@@ -19,7 +19,7 @@ final class LocationPoint {
     var instantaneousGrade: Double? // current grade percentage
     var pressure: Double? // barometric pressure in kPa
     var heartRate: Double? // bpm from HealthKit
-    var isKeyPoint: Bool // For Douglas-Peucker compression
+    var isKeyPoint: Bool = false // For Douglas-Peucker compression
     
     // GPS Compression tracking properties
     var compressionIndex: Int? // Original index before compression
