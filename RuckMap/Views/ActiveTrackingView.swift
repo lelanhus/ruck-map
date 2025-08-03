@@ -19,8 +19,29 @@ struct ActiveTrackingView: View {
     @State private var animatedPace: Double = 0.0
     @State private var lastGPSUpdate: Date?
     @State private var hapticEngine: CHHapticEngine?
+    @State private var selectedTrackingTab: TrackingTab = .metrics
+    @State private var tabTransition: AnyTransition = .slide
     @AppStorage("showCalorieImpact")
     private var showCalorieImpact = true
+    
+    enum TrackingTab: String, CaseIterable {
+        case metrics = "Metrics"
+        case map = "Map"
+        
+        var icon: String {
+            switch self {
+            case .metrics: return "chart.bar.fill"
+            case .map: return "map.fill"
+            }
+        }
+        
+        var iconUnselected: String {
+            switch self {
+            case .metrics: return "chart.bar"
+            case .map: return "map"
+            }
+        }
+    }
 
     private var formattedDistance: String {
         let miles = locationManager.totalDistance / 1609.34
@@ -154,276 +175,42 @@ struct ActiveTrackingView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Header with GPS status and adaptive info
-            VStack(spacing: 4) {
-                HStack {
-                    Label(locationManager.gpsAccuracy.description, systemImage: "location.fill")
-                        .font(.caption)
-                        .foregroundColor(Color(locationManager.gpsAccuracy.color))
-                        .padding(.horizontal)
-
-                    Spacer()
-
-                    // Adaptive GPS indicator
-                    if locationManager.adaptiveGPSManager.isAdaptiveMode {
-                        HStack(spacing: 4) {
-                            Image(systemName: "brain.head.profile")
-                                .font(.caption)
-                            Text("ADAPTIVE")
-                                .font(.caption2)
-                                .fontWeight(.medium)
-                        }
-                        .foregroundColor(.blue)
-                        .padding(.horizontal)
+            statusHeaderView
+            
+            // Tab view for metrics and map with optimized transitions
+            TabView(selection: $selectedTrackingTab) {
+                // Metrics Tab with performance optimization
+                metricsTabView
+                    .tabItem {
+                        Label(
+                            TrackingTab.metrics.rawValue,
+                            systemImage: selectedTrackingTab == .metrics ? 
+                                TrackingTab.metrics.icon : TrackingTab.metrics.iconUnselected
+                        )
                     }
-
-                    if locationManager.isAutoPaused {
-                        Text("AUTO-PAUSED")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.orange)
-                            .padding(.horizontal)
+                    .tag(TrackingTab.metrics)
+                    .accessibilityLabel("Metrics tab")
+                    .accessibilityHint("Shows detailed tracking metrics including distance, pace, and elevation")
+                
+                // Map Tab with performance optimization
+                mapTabView
+                    .tabItem {
+                        Label(
+                            TrackingTab.map.rawValue,
+                            systemImage: selectedTrackingTab == .map ? 
+                                TrackingTab.map.icon : TrackingTab.map.iconUnselected
+                        )
                     }
-                }
-
-                // Motion and battery status
-                HStack {
-                    // Motion activity indicator
-                    HStack(spacing: 2) {
-                        Image(systemName: motionActivityIcon)
-                            .font(.caption2)
-                        Text(locationManager.getMotionActivity().description.uppercased())
-                            .font(.caption2)
-                            .fontWeight(.medium)
-                    }
-                    .foregroundColor(motionActivityColor)
-                    .padding(.horizontal)
-
-                    Spacer()
-
-                    // Battery usage estimate
-                    HStack(spacing: 2) {
-                        Image(systemName: "battery.25")
-                            .font(.caption2)
-                        Text("\(String(format: "%.1f", locationManager.batteryUsageEstimate))%/hr")
-                            .font(.caption2)
-                    }
-                    .foregroundColor(batteryUsageColor)
-                    .padding(.horizontal)
-                }
-
-                // Technical status row
-                HStack {
-                    // Location suppression status
-                    if locationManager.isLocationUpdatesSuppressed {
-                        HStack(spacing: 2) {
-                            Image(systemName: "pause.circle.fill")
-                                .font(.caption2)
-                            Text("SUPPRESSED")
-                                .font(.caption2)
-                                .fontWeight(.medium)
-                        }
-                        .foregroundColor(.orange)
-                        .padding(.horizontal)
-                    }
-
-                    Spacer()
-
-                    // Movement pattern
-                    Text(
-                        locationManager.adaptiveGPSManager.currentMovementPattern.rawValue
-                            .uppercased()
-                    )
-                    .font(.caption2)
-                    .fontWeight(.medium)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal)
-
-                    // Update frequency
-                    Text(
-                        "\(String(format: "%.1f",
-                                  locationManager.adaptiveGPSManager.currentUpdateFrequencyHz))Hz"
-                    )
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal)
-                }
-
-                // Battery alert if needed
-                if locationManager.shouldShowBatteryAlert {
-                    HStack {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.caption2)
-                        Text(locationManager.batteryAlertMessage)
-                            .font(.caption2)
-                    }
-                    .foregroundColor(.orange)
-                    .padding(.horizontal)
-                    .padding(.top, 2)
-                }
-
-                // Weather alerts
-                ForEach(locationManager.weatherAlerts, id: \.title) { alert in
-                    HStack {
-                        Image(systemName: weatherAlertIcon(alert.severity))
-                            .font(.caption2)
-                        Text(alert.title)
-                            .font(.caption2)
-                            .fontWeight(.medium)
-                    }
-                    .foregroundColor(weatherAlertColor(alert.severity))
-                    .padding(.horizontal)
-                    .padding(.top, 2)
-                }
+                    .tag(TrackingTab.map)
+                    .accessibilityLabel("Map tab")
+                    .accessibilityHint("Shows real-time route map with terrain overlays and location tracking")
             }
-            .padding(.vertical, 8)
-            .background(Color(.systemGray6))
-
-            // Main metrics
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Distance card
-                    MetricCard(
-                        title: "DISTANCE",
-                        value: formattedDistance,
-                        icon: "map",
-                        color: .blue
-                    )
-
-                    // Time card
-                    MetricCard(
-                        title: "TIME",
-                        value: formattedDuration,
-                        icon: "clock",
-                        color: .green
-                    )
-
-                    // Pace card
-                    MetricCard(
-                        title: "PACE",
-                        value: formattedPace,
-                        icon: "speedometer",
-                        color: .orange
-                    )
-
-                    // Load weight card
-                    if let session = locationManager.currentSession {
-                        LoadWeightCard(
-                            currentWeight: session.loadWeight,
-                            onAdjustTapped: {
-                                triggerHapticFeedback(.light)
-                                showLoadWeightAdjustment = true
-                            }
-                        )
-                    }
-
-                    // Current grade card
-                    MetricCard(
-                        title: "GRADE",
-                        value: formattedGrade,
-                        icon: currentGrade >= 0 ? "arrow.up.right" : "arrow.down.right",
-                        color: gradeColor
-                    )
-
-                    // Calorie metrics row
-                    HStack(spacing: 12) {
-                        CalorieMetricCard(
-                            title: "CALORIES",
-                            value: formattedCalories,
-                            icon: "flame.fill",
-                            color: .red,
-                            weatherImpact: showCalorieImpact ? weatherImpactPercentage : nil
-                        )
-
-                        MetricCard(
-                            title: "BURN RATE",
-                            value: formattedCalorieBurnRate,
-                            icon: "speedometer",
-                            color: .orange
-                        )
-                    }
-
-                    // Elevation metrics row
-                    HStack(spacing: 12) {
-                        ElevationMetricCard(
-                            title: "GAIN",
-                            value: formattedElevationGain,
-                            icon: "arrow.up",
-                            color: .green
-                        )
-
-                        ElevationMetricCard(
-                            title: "LOSS",
-                            value: formattedElevationLoss,
-                            icon: "arrow.down",
-                            color: .red
-                        )
-                    }
-
-                    // Weather information
-                    if let weather = locationManager.currentWeatherConditions {
-                        WeatherCard(
-                            conditions: weather,
-                            showCalorieImpact: showCalorieImpact
-                        )
-                    }
-                }
-                .padding()
-            }
-
-            // Control buttons
-            VStack(spacing: 15) {
-                // Pause/Resume button
-                Button(action: {
-                    triggerHapticFeedback(.impact)
-                    locationManager.togglePause()
-                }) {
-                    HStack {
-                        Image(
-                            systemName: locationManager
-                                .trackingState == .paused ? "play.fill" : "pause.fill"
-                        )
-                        Text(locationManager.trackingState == .paused ? "Resume" : "Pause")
-                    }
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(
-                        locationManager.trackingState == .paused ? Color.green : Color
-                            .orange
-                    )
-                    .foregroundColor(.white)
-                    .cornerRadius(12)
-                }
-
-                // Stop button
-                Button(action: {
-                    triggerHapticFeedback(.warning)
-                    showEndConfirmation = true
-                }) {
-                    HStack {
-                        Image(systemName: "stop.fill")
-                        Text("End Ruck")
-                    }
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.red)
-                    .foregroundColor(.white)
-                    .cornerRadius(12)
-                }
-            }
-            .padding()
-            .background(Color(.systemGray6))
+            .tint(.blue)
+            
+            // Control buttons (always visible)
+            controlButtonsView
         }
         .navigationBarHidden(true)
-        .overlay(alignment: .topTrailing) {
-            // Terrain override overlay
-            if locationManager.trackingState == .tracking {
-                TerrainOverlayCompat(locationManager: locationManager)
-            }
-        }
         .alert("End Ruck?", isPresented: $showEndConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("End", role: .destructive) {
@@ -444,20 +231,25 @@ struct ActiveTrackingView: View {
             Text("Failed to save ruck session. Please try again.")
         }
         .task { [weak locationManager] in
-            // Medium-frequency updates for elevation and GPS
+            // Optimized updates with adaptive frequency
             while !Task.isCancelled {
                 guard let locationManager else { break }
 
-                totalElevationGain = locationManager.elevationManager.elevationGain
-                totalElevationLoss = locationManager.elevationManager.elevationLoss
-                currentGrade = locationManager.elevationManager.currentGrade
-
-                // Update GPS timestamp when we have a current location
-                if locationManager.currentLocation != nil {
-                    lastGPSUpdate = Date()
+                // Batch state updates for better performance
+                await MainActor.run {
+                    totalElevationGain = locationManager.elevationManager.elevationGain
+                    totalElevationLoss = locationManager.elevationManager.elevationLoss
+                    currentGrade = locationManager.elevationManager.currentGrade
+                    
+                    // Update GPS timestamp when we have a current location
+                    if locationManager.currentLocation != nil {
+                        lastGPSUpdate = Date()
+                    }
                 }
 
-                try? await Task.sleep(for: .seconds(2))
+                // Adaptive update frequency based on tracking state
+                let sleepDuration: Duration = locationManager.trackingState == .tracking ? .seconds(1) : .seconds(3)
+                try? await Task.sleep(for: sleepDuration)
             }
         }
         .onAppear {
@@ -492,6 +284,353 @@ struct ActiveTrackingView: View {
                 try? await Task.sleep(for: .milliseconds(16))
             }
         }
+    }
+
+    // MARK: - View Components
+    
+    private var statusHeaderView: some View {
+        VStack(spacing: 4) {
+            HStack {
+                Label(locationManager.gpsAccuracy.description, systemImage: "location.fill")
+                    .font(.caption)
+                    .foregroundColor(Color(locationManager.gpsAccuracy.color))
+                    .padding(.horizontal)
+
+                Spacer()
+
+                // Adaptive GPS indicator
+                if locationManager.adaptiveGPSManager.isAdaptiveMode {
+                    HStack(spacing: 4) {
+                        Image(systemName: "brain.head.profile")
+                            .font(.caption)
+                        Text("ADAPTIVE")
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                    }
+                    .foregroundColor(.blue)
+                    .padding(.horizontal)
+                }
+
+                if locationManager.isAutoPaused {
+                    Text("AUTO-PAUSED")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.orange)
+                        .padding(.horizontal)
+                }
+            }
+
+            // Motion and battery status
+            HStack {
+                // Motion activity indicator
+                HStack(spacing: 2) {
+                    Image(systemName: motionActivityIcon)
+                        .font(.caption2)
+                    Text(locationManager.getMotionActivity().description.uppercased())
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                }
+                .foregroundColor(motionActivityColor)
+                .padding(.horizontal)
+
+                Spacer()
+
+                // Battery usage estimate
+                HStack(spacing: 2) {
+                    Image(systemName: "battery.25")
+                        .font(.caption2)
+                    Text("\(String(format: "%.1f", locationManager.batteryUsageEstimate))%/hr")
+                        .font(.caption2)
+                }
+                .foregroundColor(batteryUsageColor)
+                .padding(.horizontal)
+            }
+
+            // Technical status row
+            HStack {
+                // Location suppression status
+                if locationManager.isLocationUpdatesSuppressed {
+                    HStack(spacing: 2) {
+                        Image(systemName: "pause.circle.fill")
+                            .font(.caption2)
+                        Text("SUPPRESSED")
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                    }
+                    .foregroundColor(.orange)
+                    .padding(.horizontal)
+                }
+
+                Spacer()
+
+                // Movement pattern
+                Text(
+                    locationManager.adaptiveGPSManager.currentMovementPattern.rawValue
+                        .uppercased()
+                )
+                .font(.caption2)
+                .fontWeight(.medium)
+                .foregroundColor(.secondary)
+                .padding(.horizontal)
+
+                // Update frequency
+                Text(
+                    "\(String(format: "%.1f", locationManager.adaptiveGPSManager.currentUpdateFrequencyHz))Hz"
+                )
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .padding(.horizontal)
+            }
+
+            // Battery alert if needed
+            if locationManager.shouldShowBatteryAlert {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption2)
+                    Text(locationManager.batteryAlertMessage)
+                        .font(.caption2)
+                }
+                .foregroundColor(.orange)
+                .padding(.horizontal)
+                .padding(.top, 2)
+            }
+
+            // Weather alerts
+            ForEach(locationManager.weatherAlerts, id: \.title) { alert in
+                HStack {
+                    Image(systemName: weatherAlertIcon(alert.severity))
+                        .font(.caption2)
+                    Text(alert.title)
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                }
+                .foregroundColor(weatherAlertColor(alert.severity))
+                .padding(.horizontal)
+                .padding(.top, 2)
+            }
+        }
+        .padding(.vertical, 8)
+        .background(Color(.systemGray6))
+    }
+    
+    private var metricsTabView: some View {
+        ScrollView {
+            LazyVStack(spacing: 20) {
+                // Distance card
+                MetricCard(
+                    title: "DISTANCE",
+                    value: formattedDistance,
+                    icon: "map",
+                    color: .blue
+                )
+
+                // Time card
+                MetricCard(
+                    title: "TIME",
+                    value: formattedDuration,
+                    icon: "clock",
+                    color: .green
+                )
+
+                // Pace card
+                MetricCard(
+                    title: "PACE",
+                    value: formattedPace,
+                    icon: "speedometer",
+                    color: .orange
+                )
+
+                // Load weight card
+                if let session = locationManager.currentSession {
+                    LoadWeightCard(
+                        currentWeight: session.loadWeight,
+                        onAdjustTapped: {
+                            triggerHapticFeedback(.light)
+                            showLoadWeightAdjustment = true
+                        }
+                    )
+                }
+
+                // Current grade card
+                MetricCard(
+                    title: "GRADE",
+                    value: formattedGrade,
+                    icon: currentGrade >= 0 ? "arrow.up.right" : "arrow.down.right",
+                    color: gradeColor
+                )
+
+                // Calorie metrics row
+                HStack(spacing: 12) {
+                    CalorieMetricCard(
+                        title: "CALORIES",
+                        value: formattedCalories,
+                        icon: "flame.fill",
+                        color: .red,
+                        weatherImpact: showCalorieImpact ? weatherImpactPercentage : nil
+                    )
+
+                    MetricCard(
+                        title: "BURN RATE",
+                        value: formattedCalorieBurnRate,
+                        icon: "speedometer",
+                        color: .orange
+                    )
+                }
+
+                // Elevation metrics row
+                HStack(spacing: 12) {
+                    ElevationMetricCard(
+                        title: "GAIN",
+                        value: formattedElevationGain,
+                        icon: "arrow.up",
+                        color: .green
+                    )
+
+                    ElevationMetricCard(
+                        title: "LOSS",
+                        value: formattedElevationLoss,
+                        icon: "arrow.down",
+                        color: .red
+                    )
+                }
+
+                // Weather information with conditional rendering
+                if let weather = locationManager.currentWeatherConditions {
+                    WeatherCard(
+                        conditions: weather,
+                        showCalorieImpact: showCalorieImpact
+                    )
+                    .transition(.scale.combined(with: .opacity))
+                    .animation(.easeInOut(duration: 0.3), value: weather.id)
+                }
+            }
+            .padding()
+        }
+    }
+    
+    private var mapTabView: some View {
+        ZStack {
+            // Main map view
+            MapView(
+                locationManager: locationManager,
+                showCurrentLocation: true,
+                followUser: true,
+                showTerrain: true,
+                interactionModes: .all
+            )
+            
+            // Floating metrics overlay on map
+            VStack {
+                HStack {
+                    Spacer()
+                    compactMetricsOverlay
+                }
+                Spacer()
+            }
+            .padding()
+            
+            // Terrain override overlay
+            if locationManager.trackingState == .tracking {
+                VStack {
+                    HStack {
+                        Spacer()
+                        TerrainOverlayCompat(locationManager: locationManager)
+                    }
+                    Spacer()
+                }
+            }
+        }
+        .navigationBarHidden(true)
+    }
+    
+    private var compactMetricsOverlay: some View {
+        VStack(spacing: 8) {
+            // Essential metrics overlay with optimized layout
+            VStack(spacing: 6) {
+                // Distance and time row
+                HStack(spacing: 12) {
+                    CompactMetric(
+                        icon: "map",
+                        value: formattedDistance,
+                        color: .blue
+                    )
+                    
+                    CompactMetric(
+                        icon: "clock",
+                        value: formattedDuration,
+                        color: .green
+                    )
+                }
+                
+                // Pace and elevation row
+                HStack(spacing: 12) {
+                    CompactMetric(
+                        icon: "speedometer",
+                        value: formattedPace,
+                        color: .orange
+                    )
+                    
+                    CompactMetric(
+                        icon: currentGrade >= 0 ? "arrow.up.right" : "arrow.down.right",
+                        value: formattedGrade,
+                        color: gradeColor
+                    )
+                }
+            }
+            .padding(12)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Quick metrics: \(formattedDistance), \(formattedDuration), \(formattedPace), \(formattedGrade)")
+        }
+    }
+    
+    private var controlButtonsView: some View {
+        VStack(spacing: 15) {
+            // Pause/Resume button
+            Button(action: {
+                triggerHapticFeedback(.impact)
+                locationManager.togglePause()
+            }) {
+                HStack {
+                    Image(
+                        systemName: locationManager
+                            .trackingState == .paused ? "play.fill" : "pause.fill"
+                    )
+                    Text(locationManager.trackingState == .paused ? "Resume" : "Pause")
+                }
+                .font(.title3)
+                .fontWeight(.semibold)
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(
+                    locationManager.trackingState == .paused ? Color.green : Color
+                        .orange
+                )
+                .foregroundColor(.white)
+                .cornerRadius(12)
+            }
+
+            // Stop button
+            Button(action: {
+                triggerHapticFeedback(.warning)
+                showEndConfirmation = true
+            }) {
+                HStack {
+                    Image(systemName: "stop.fill")
+                    Text("End Ruck")
+                }
+                .font(.title3)
+                .fontWeight(.semibold)
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.red)
+                .foregroundColor(.white)
+                .cornerRadius(12)
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
     }
 
     // MARK: - Helper Functions
@@ -1061,6 +1200,36 @@ struct WeatherCard: View {
                 .font(.caption2)
                 .fontWeight(.medium)
         }
+    }
+}
+
+// MARK: - Compact Metric Component
+
+/// Optimized compact metric display for map overlay
+struct CompactMetric: View {
+    let icon: String
+    let value: String
+    let color: Color
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundColor(color)
+            
+            Text(value)
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundColor(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(value)")
+        .contentTransition(.numericText())
     }
 }
 
