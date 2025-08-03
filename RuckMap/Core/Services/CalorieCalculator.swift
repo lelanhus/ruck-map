@@ -1,9 +1,10 @@
 import Foundation
 import CoreLocation
+import Observation
 
 // MARK: - Terrain Multipliers
 /// Terrain difficulty multipliers based on military load carriage studies
-enum TerrainDifficultyMultiplier: Double, CaseIterable {
+enum TerrainDifficultyMultiplier: Double, CaseIterable, Sendable {
     case pavement = 1.0
     case trail = 1.2
     case gravel = 1.3
@@ -158,13 +159,14 @@ enum CalorieCalculationError: LocalizedError, Sendable {
 /// Actor-based calorie calculator implementing the Load Carriage Decision Aid (LCDA) algorithm
 /// Used by US Army for military load carriage energy expenditure predictions
 @MainActor
-final class CalorieCalculator: ObservableObject {
+@Observable
+final class CalorieCalculator {
     
-    // MARK: - Published Properties
-    @Published private(set) var currentMetabolicRate: Double = 0.0 // kcal/min
-    @Published private(set) var totalCalories: Double = 0.0 // kcal
-    @Published private(set) var lastCalculationResult: CalorieCalculationResult?
-    @Published private(set) var isCalculating: Bool = false
+    // MARK: - Observable Properties
+    private(set) var currentMetabolicRate: Double = 0.0 // kcal/min
+    private(set) var totalCalories: Double = 0.0 // kcal
+    private(set) var lastCalculationResult: CalorieCalculationResult?
+    private(set) var isCalculating: Bool = false
     
     // MARK: - Private Properties
     private var calculationHistory: [CalorieCalculationResult] = []
@@ -200,9 +202,6 @@ final class CalorieCalculator: ObservableObject {
         // Initialize with default values
     }
     
-    deinit {
-        calculationTask?.cancel()
-    }
     
     // MARK: - Public Interface
     
@@ -417,12 +416,13 @@ final class CalorieCalculator: ObservableObject {
 // MARK: - Real-time Calculation Support
 extension CalorieCalculator {
     
-    /// Starts continuous calorie calculation with location data
+    /// Starts continuous calorie calculation with location data and real-time terrain detection
     func startContinuousCalculation(
         bodyWeight: Double,
         loadWeight: Double,
         locationProvider: @escaping @Sendable () async -> (location: CLLocation?, grade: Double?, terrain: TerrainType?),
-        weatherProvider: @escaping @Sendable () async -> WeatherData?
+        weatherProvider: @escaping @Sendable () async -> WeatherData?,
+        terrainFactorProvider: @escaping @Sendable () async -> Double
     ) {
         // Cancel existing calculation task
         calculationTask?.cancel()
@@ -430,20 +430,32 @@ extension CalorieCalculator {
         calculationTask = Task { @MainActor in
             while !Task.isCancelled {
                 do {
-                    // Get current data
-                    let (location, grade, terrain) = await locationProvider()
-                    let weather = await weatherProvider()
+                    // Get current data concurrently for better performance
+                    async let locationData = locationProvider()
+                    async let weatherData = weatherProvider()
+                    async let terrainFactor = terrainFactorProvider()
+                    
+                    let (location, grade, terrain) = await locationData
+                    let weather = await weatherData
+                    let dynamicTerrainFactor = await terrainFactor
                     
                     guard let location = location,
-                          let grade = grade,
-                          let terrain = terrain else {
-                        // Wait and retry if data not available
+                          let grade = grade else {
+                        // Wait and retry if essential data not available
                         try await Task.sleep(for: .seconds(1))
                         continue
                     }
                     
-                    // Create calculation parameters
-                    let terrainMultiplier = TerrainDifficultyMultiplier(from: terrain).rawValue
+                    // Use dynamic terrain factor from TerrainDetector, fallback to terrain-based calculation
+                    let finalTerrainMultiplier: Double
+                    if dynamicTerrainFactor > 0 {
+                        finalTerrainMultiplier = dynamicTerrainFactor
+                    } else if let terrain = terrain {
+                        finalTerrainMultiplier = TerrainDifficultyMultiplier(from: terrain).rawValue
+                    } else {
+                        finalTerrainMultiplier = 1.2 // Default trail factor
+                    }
+                    
                     let temperature = weather?.temperature ?? 20.0
                     let windSpeed = weather?.windSpeed ?? 0.0
                     
@@ -455,7 +467,7 @@ extension CalorieCalculator {
                         temperature: temperature,
                         altitude: location.altitude,
                         windSpeed: windSpeed,
-                        terrainMultiplier: terrainMultiplier,
+                        terrainMultiplier: finalTerrainMultiplier,
                         timestamp: location.timestamp
                     )
                     
@@ -474,10 +486,73 @@ extension CalorieCalculator {
         }
     }
     
+    /// Legacy method maintained for backward compatibility
+    func startContinuousCalculation(
+        bodyWeight: Double,
+        loadWeight: Double,
+        locationProvider: @escaping @Sendable () async -> (location: CLLocation?, grade: Double?, terrain: TerrainType?),
+        weatherProvider: @escaping @Sendable () async -> WeatherData?
+    ) {
+        startContinuousCalculation(
+            bodyWeight: bodyWeight,
+            loadWeight: loadWeight,
+            locationProvider: locationProvider,
+            weatherProvider: weatherProvider,
+            terrainFactorProvider: {
+                // Fallback to terrain-based calculation
+                let (_, _, terrain) = await locationProvider()
+                return terrain?.terrainFactor ?? 1.2
+            }
+        )
+    }
+    
     /// Stops continuous calculation
     func stopContinuousCalculation() {
         calculationTask?.cancel()
         calculationTask = nil
+    }
+}
+
+// MARK: - Terrain Integration Support
+extension CalorieCalculator {
+    
+    /// Updates terrain factor in real-time during calculation
+    /// - Parameter terrainFactor: Dynamic terrain factor from TerrainDetector
+    func updateTerrainFactor(_ terrainFactor: Double) {
+        guard isCalculating else { return }
+        
+        // Update the current calculation with new terrain factor if available
+        if let lastResult = lastCalculationResult {
+            // Recalculate with new terrain factor
+            let adjustedMetabolicRate = (lastResult.metabolicRate / lastResult.terrainFactor) * terrainFactor
+            
+            // Create updated result
+            let updatedResult = CalorieCalculationResult(
+                metabolicRate: adjustedMetabolicRate,
+                totalCalories: lastResult.totalCalories,
+                confidenceInterval: (adjustedMetabolicRate * 0.9)...(adjustedMetabolicRate * 1.1),
+                gradeAdjustmentFactor: lastResult.gradeAdjustmentFactor,
+                environmentalFactor: lastResult.environmentalFactor,
+                terrainFactor: terrainFactor,
+                altitude: lastResult.altitude,
+                timestamp: Date()
+            )
+            
+            currentMetabolicRate = adjustedMetabolicRate
+            lastCalculationResult = updatedResult
+            addToHistory(updatedResult)
+        }
+    }
+    
+    /// Gets the current terrain factor being used in calculations
+    var currentTerrainFactor: Double {
+        lastCalculationResult?.terrainFactor ?? 1.0
+    }
+    
+    /// Gets terrain factor impact on calorie burn rate
+    var terrainFactorImpact: Double {
+        let factor = currentTerrainFactor
+        return ((factor - 1.0) * 100) // Percentage increase over baseline
     }
 }
 
@@ -524,4 +599,5 @@ extension CalorieCalculator {
         
         return validationResults
     }
+    
 }

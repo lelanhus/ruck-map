@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-enum TerrainType: String, CaseIterable, Codable {
+enum TerrainType: String, CaseIterable, Codable, Sendable {
     case pavedRoad = "paved_road"
     case trail = "trail"
     case gravel = "gravel"
@@ -26,14 +26,14 @@ enum TerrainType: String, CaseIterable, Codable {
     
     var terrainFactor: Double {
         switch self {
-        case .pavedRoad: return 1.0
-        case .trail: return 1.2
-        case .gravel: return 1.3
-        case .sand: return 1.5
-        case .mud: return 1.8
-        case .snow: return 2.1
-        case .stairs: return 1.8
-        case .grass: return 1.2
+        case .pavedRoad: return 1.0  // Baseline efficiency (Pandolf standard)
+        case .trail: return 1.2      // 20% increase in energy expenditure
+        case .gravel: return 1.3     // 30% increase for loose surfaces
+        case .sand: return 2.1       // 110% increase due to energy loss (Session 7 research)
+        case .mud: return 1.8        // 80% increase for soft/sticky terrain
+        case .snow: return 2.5       // 150% increase due to poor traction (Session 7: 6" snow)
+        case .stairs: return 2.0     // 100% increase for vertical movement
+        case .grass: return 1.2      // 20% increase similar to trails
         }
     }
     
@@ -47,6 +47,25 @@ enum TerrainType: String, CaseIterable, Codable {
         case .snow: return "snowflake"
         case .stairs: return "stairs"
         case .grass: return "leaf"
+        }
+    }
+    
+    /// SF Symbol icon name for UI representation (alias for backward compatibility)
+    var iconName: String {
+        return icon
+    }
+    
+    /// Army green design system color identifier
+    var colorIdentifier: String {
+        switch self {
+        case .pavedRoad: return "armyGreen.secondary"
+        case .trail: return "armyGreen.primary"
+        case .gravel: return "armyGreen.tertiary"
+        case .sand: return "armyGreen.accent"
+        case .mud: return "armyGreen.dark"
+        case .snow: return "armyGreen.light"
+        case .stairs: return "armyGreen.bright"
+        case .grass: return "armyGreen.natural"
         }
     }
 }
