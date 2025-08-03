@@ -610,11 +610,15 @@ struct DetailedMetricsView: View {
 
 #Preview {
   // Create preview with sample data
-  let config = ModelConfiguration(isStoredInMemoryOnly: true)
-  let container = try! ModelContainer(
-    for: RuckSession.self, LocationPoint.self, TerrainSegment.self, WeatherConditions.self,
-    configurations: config
-  )
-  
-  return AnalyticsView(modelContainer: container)
+  do {
+    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try ModelContainer(
+      for: RuckSession.self, LocationPoint.self, TerrainSegment.self, WeatherConditions.self,
+      configurations: config
+    )
+    
+    return AnalyticsView(modelContainer: container)
+  } catch {
+    return Text("Preview unavailable: \(error.localizedDescription)")
+  }
 }

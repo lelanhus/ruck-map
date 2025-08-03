@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 @Model
-final class WeatherConditions {
+final class WeatherConditions: @unchecked Sendable {
     var timestamp: Date = Date()
     var temperature: Double = 20.0 // Celsius
     var humidity: Double = 50.0 // percentage (0-100)

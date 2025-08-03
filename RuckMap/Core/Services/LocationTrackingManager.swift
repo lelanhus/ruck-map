@@ -497,7 +497,13 @@ final class LocationTrackingManager: NSObject {
             
             // Save periodically (every 10 points)
             if session.locationPoints.count % 10 == 0 {
-                try? modelContext?.save()
+                if let modelContext = modelContext {
+                    do {
+                        try modelContext.save()
+                    } catch {
+                        logger.error("Failed to save location points: \(error.localizedDescription)")
+                    }
+                }
             }
         }
         

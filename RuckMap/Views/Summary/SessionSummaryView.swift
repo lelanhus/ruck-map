@@ -1008,37 +1008,42 @@ private struct ShareSheet: UIViewControllerRepresentable {
 }
 
 #Preview {
-    let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: RuckSession.self, configurations: config)
-    
-    let session = RuckSession()
-    session.totalDistance = 5000 // 5km
-    session.totalDuration = 3600 // 1 hour
-    session.loadWeight = 20 // 20kg
-    session.totalCalories = 500
-    session.elevationGain = 100
-    session.elevationLoss = 80
-    session.averageGrade = 5.0
-    session.endDate = Date()
-    
-    // Add some sample location points
-    for i in 0..<10 {
-        let point = LocationPoint(
-            timestamp: Date().addingTimeInterval(TimeInterval(i * 60)),
-            latitude: 37.7749 + Double(i) * 0.001,
-            longitude: -122.4194 + Double(i) * 0.001,
-            altitude: 100 + Double(i) * 10,
-            horizontalAccuracy: 5.0,
-            verticalAccuracy: 3.0,
-            speed: 1.0,
-            course: 0.0
-        )
-        session.locationPoints.append(point)
+    do {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: RuckSession.self, configurations: config)
+        
+        let session = RuckSession()
+        session.totalDistance = 5000 // 5km
+        session.totalDuration = 3600 // 1 hour
+        session.loadWeight = 20 // 20kg
+        session.totalCalories = 500
+        session.elevationGain = 100
+        session.elevationLoss = 80
+        session.averageGrade = 5.0
+        session.endDate = Date()
+        
+        // Add some sample location points
+        for i in 0..<10 {
+            let point = LocationPoint(
+                timestamp: Date().addingTimeInterval(TimeInterval(i * 60)),
+                latitude: 37.7749 + Double(i) * 0.001,
+                longitude: -122.4194 + Double(i) * 0.001,
+                altitude: 100 + Double(i) * 10,
+                horizontalAccuracy: 5.0,
+                verticalAccuracy: 3.0,
+                speed: 1.0,
+                course: 0.0
+            )
+            session.locationPoints.append(point)
+        }
+        
+        container.mainContext.insert(session)
+        
+        let coordinator = try DataCoordinator()
+        return SessionSummaryView(session: session)
+            .modelContainer(container)
+            .environmentObject(coordinator)
+    } catch {
+        return Text("Preview unavailable: \(error.localizedDescription)")
     }
-    
-    container.mainContext.insert(session)
-    
-    return SessionSummaryView(session: session)
-        .modelContainer(container)
-        .environmentObject(try! DataCoordinator())
 }

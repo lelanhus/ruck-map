@@ -375,10 +375,16 @@ final class WeatherService {
             checkForWeatherAlerts(conditions)
             
             // Save context if available
-            try? modelContext?.save()
+            if let modelContext = modelContext {
+                do {
+                    try modelContext.save()
+                } catch {
+                    logger.error("Failed to save weather conditions: \(error.localizedDescription)")
+                }
+            }
             
         } catch {
-            print("Weather update failed: \(error.localizedDescription)")
+            logger.error("Weather update failed: \(error.localizedDescription)")
             
             // Create default weather conditions if no data available
             if session.weatherConditions == nil {

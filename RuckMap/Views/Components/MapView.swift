@@ -385,7 +385,7 @@ final class MapPresentation {
               let session = locationManager.currentSession else { return }
         
         let totalDistance = locationManager.totalDistance
-        let unitsPerMarker = distanceUnits == "imperial" ? 1609.34 : 1000.0 // 1 mile or 1 km
+        let unitsPerMarker = distanceUnits == "imperial" ? FormatUtilities.ConversionConstants.metersToMiles : 1000.0 // 1 mile or 1 km
         
         let markerCount = Int(totalDistance / unitsPerMarker)
         

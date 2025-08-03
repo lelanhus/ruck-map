@@ -1252,7 +1252,7 @@ final class SessionDetailPresentation {
     private func generateDistanceMarkers() {
         guard let session = session else { return }
         
-        let distanceInterval: Double = units == "km" ? 1000 : 1609.34 // 1km or 1 mile
+        let distanceInterval: Double = units == "km" ? 1000 : FormatUtilities.ConversionConstants.metersToMiles // 1km or 1 mile
         var accumulatedDistance: Double = 0
         var markerDistance: Double = distanceInterval
         var lastPoint: LocationPoint?
@@ -1407,7 +1407,7 @@ final class SessionDetailPresentation {
     private func generateSplitTimes() {
         guard let session = session else { return }
         
-        let distanceInterval: Double = units == "km" ? 1000 : 1609.34
+        let distanceInterval: Double = units == "km" ? 1000 : FormatUtilities.ConversionConstants.metersToMiles
         var accumulatedDistance: Double = 0
         var splitDistance: Double = distanceInterval
         var lastPoint: LocationPoint?

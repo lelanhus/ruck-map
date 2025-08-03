@@ -160,18 +160,23 @@ struct ProgrammaticSessionSummary {
 // MARK: - Usage Examples
 
 #Preview("Integration Example 1") {
-    let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: RuckSession.self, configurations: config)
-    
-    return ActiveTrackingWithSummaryIntegration(
-        locationManager: LocationTrackingManager()
-    )
-    .modelContainer(container)
+    do {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: RuckSession.self, configurations: config)
+        
+        return ActiveTrackingWithSummaryIntegration(
+            locationManager: LocationTrackingManager()
+        )
+        .modelContainer(container)
+    } catch {
+        return Text("Preview unavailable: \(error.localizedDescription)")
+    }
 }
 
 #Preview("Integration Example 2") {
-    let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: RuckSession.self, configurations: config)
+    do {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: RuckSession.self, configurations: config)
     
     // Create sample sessions
     let session1 = RuckSession()
@@ -188,8 +193,11 @@ struct ProgrammaticSessionSummary {
     container.mainContext.insert(session1)
     container.mainContext.insert(session2)
     
-    return HistoryViewWithSummaryIntegration(sessions: [session1, session2])
-        .modelContainer(container)
+        return HistoryViewWithSummaryIntegration(sessions: [session1, session2])
+            .modelContainer(container)
+    } catch {
+        return Text("Preview unavailable: \(error.localizedDescription)")
+    }
 }
 
 // MARK: - Navigation Patterns

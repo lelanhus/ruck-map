@@ -253,7 +253,11 @@ struct SessionHistoryView: View {
     private func toggleFavorite(_ session: RuckSession) {
         // Toggle favorite status (using RPE as favorite indicator for now)
         session.rpe = (session.rpe != nil && session.rpe! >= 8) ? nil : 10
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            print("Failed to save favorite status: \(error.localizedDescription)")
+        }
         viewModel.updateSessions(completedSessions)
     }
     

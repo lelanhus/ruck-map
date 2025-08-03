@@ -151,7 +151,7 @@ struct AnalyticsFormatters {
     case .kilograms:
       return String(format: "%.1f kg", weight)
     case .pounds:
-      let pounds = weight * 2.20462
+      let pounds = weight * FormatUtilities.ConversionConstants.kilogramsToPounds
       return String(format: "%.1f lbs", pounds)
     }
   }
