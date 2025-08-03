@@ -1,119 +1,138 @@
-import SwiftUI
-import SwiftData
+import CoreHaptics
 import MapKit
+import SwiftData
+import SwiftUI
 
 struct ActiveTrackingView: View {
     @State var locationManager: LocationTrackingManager
-    @Environment(\.modelContext) private var modelContext
+    @Environment(\.modelContext)
+    private var modelContext
     @State private var showEndConfirmation = false
+    @State private var showSaveError = false
     @State private var currentGrade: Double = 0.0
     @State private var totalElevationGain: Double = 0.0
     @State private var totalElevationLoss: Double = 0.0
-    @AppStorage("showCalorieImpact") private var showCalorieImpact = true
-    
+    @State private var showLoadWeightAdjustment = false
+    @State private var isLoading = false
+    @State private var animatedDistance: Double = 0.0
+    @State private var animatedCalories: Double = 0.0
+    @State private var animatedPace: Double = 0.0
+    @State private var lastGPSUpdate: Date?
+    @State private var hapticEngine: CHHapticEngine?
+    @AppStorage("showCalorieImpact")
+    private var showCalorieImpact = true
+
     private var formattedDistance: String {
         let miles = locationManager.totalDistance / 1609.34
         return String(format: "%.2f mi", miles)
     }
-    
+
     private var formattedPace: String {
-        guard locationManager.currentPace > 0 else { return "--:--" }
-        let minutes = Int(locationManager.currentPace)
-        let seconds = Int((locationManager.currentPace - Double(minutes)) * 60)
-        return String(format: "%d:%02d /mi", Int(locationManager.currentPace * 1.60934), seconds)
+        guard locationManager.currentPace > 0 else {
+            return "--:--"
+        }
+        // Convert pace from min/km to min/mi
+        let paceInMinPerMile = locationManager.currentPace * 1.60934
+        let minutes = Int(paceInMinPerMile)
+        let seconds = Int((paceInMinPerMile - Double(minutes)) * 60)
+        return String(format: "%d:%02d /mi", minutes, seconds)
     }
-    
+
     private var formattedDuration: String {
-        guard let session = locationManager.currentSession else { return "00:00" }
+        guard let session = locationManager.currentSession else {
+            return "00:00"
+        }
         let duration = session.duration
         let hours = Int(duration) / 3600
         let minutes = Int(duration) % 3600 / 60
         let seconds = Int(duration) % 60
-        
+
         if hours > 0 {
             return String(format: "%d:%02d:%02d", hours, minutes, seconds)
         } else {
             return String(format: "%d:%02d", minutes, seconds)
         }
     }
-    
+
     private var formattedGrade: String {
         let absGrade = abs(currentGrade)
         let sign = currentGrade >= 0 ? "+" : "-"
         return String(format: "%@%.1f%%", sign, absGrade)
     }
-    
+
     private var formattedElevationGain: String {
         let feet = totalElevationGain * 3.28084
         return String(format: "%.0f ft", feet)
     }
-    
+
     private var formattedElevationLoss: String {
         let feet = totalElevationLoss * 3.28084
         return String(format: "%.0f ft", feet)
     }
-    
+
     private var formattedCalories: String {
         let calories = locationManager.totalCaloriesBurned
         return String(format: "%.0f cal", calories)
     }
-    
+
     private var formattedCalorieBurnRate: String {
         let rate = locationManager.currentCalorieBurnRate
         return String(format: "%.1f cal/min", rate)
     }
-    
+
     private var weatherImpactPercentage: Int {
-        guard let conditions = locationManager.currentWeatherConditions else { return 0 }
+        guard let conditions = locationManager.currentWeatherConditions else {
+            return 0
+        }
         let adjustmentFactor = conditions.temperatureAdjustmentFactor
         return Int((adjustmentFactor - 1.0) * 100)
     }
-    
+
     private var gradeColor: Color {
         let absGrade = abs(currentGrade)
         switch absGrade {
-        case 0..<3:
+        case 0 ..< 3:
             return .green
-        case 3..<8:
+        case 3 ..< 8:
             return .orange
-        case 8..<15:
+        case 8 ..< 15:
             return .red
         default:
             return .purple
         }
     }
-    
+
     private var batteryUsageColor: Color {
         let usage = locationManager.batteryUsageEstimate
         switch usage {
-        case 0..<5:
+        case 0 ..< 5:
             return .green
-        case 5..<10:
+        case 5 ..< 10:
             return .blue
-        case 10..<15:
+        case 10 ..< 15:
             return .orange
         default:
             return .red
         }
     }
-    
+
     private var motionActivityIcon: String {
         switch locationManager.getMotionActivity() {
         case .stationary:
-            return "figure.stand"
+            "figure.stand"
         case .walking:
-            return "figure.walk"
+            "figure.walk"
         case .running:
-            return "figure.run"
+            "figure.run"
         case .cycling:
-            return "bicycle"
+            "bicycle"
         case .automotive:
-            return "car.fill"
+            "car.fill"
         case .unknown:
-            return "questionmark.circle"
+            "questionmark.circle"
         }
     }
-    
+
     private var motionActivityColor: Color {
         let confidence = locationManager.motionConfidence
         switch locationManager.getMotionActivity() {
@@ -131,7 +150,7 @@ struct ActiveTrackingView: View {
             return .secondary
         }
     }
-    
+
     var body: some View {
         VStack(spacing: 0) {
             // Header with GPS status and adaptive info
@@ -141,9 +160,9 @@ struct ActiveTrackingView: View {
                         .font(.caption)
                         .foregroundColor(Color(locationManager.gpsAccuracy.color))
                         .padding(.horizontal)
-                    
+
                     Spacer()
-                    
+
                     // Adaptive GPS indicator
                     if locationManager.adaptiveGPSManager.isAdaptiveMode {
                         HStack(spacing: 4) {
@@ -156,7 +175,7 @@ struct ActiveTrackingView: View {
                         .foregroundColor(.blue)
                         .padding(.horizontal)
                     }
-                    
+
                     if locationManager.isAutoPaused {
                         Text("AUTO-PAUSED")
                             .font(.caption)
@@ -165,7 +184,7 @@ struct ActiveTrackingView: View {
                             .padding(.horizontal)
                     }
                 }
-                
+
                 // Motion and battery status
                 HStack {
                     // Motion activity indicator
@@ -178,9 +197,9 @@ struct ActiveTrackingView: View {
                     }
                     .foregroundColor(motionActivityColor)
                     .padding(.horizontal)
-                    
+
                     Spacer()
-                    
+
                     // Battery usage estimate
                     HStack(spacing: 2) {
                         Image(systemName: "battery.25")
@@ -191,7 +210,7 @@ struct ActiveTrackingView: View {
                     .foregroundColor(batteryUsageColor)
                     .padding(.horizontal)
                 }
-                
+
                 // Technical status row
                 HStack {
                     // Location suppression status
@@ -206,23 +225,29 @@ struct ActiveTrackingView: View {
                         .foregroundColor(.orange)
                         .padding(.horizontal)
                     }
-                    
+
                     Spacer()
-                    
+
                     // Movement pattern
-                    Text(locationManager.adaptiveGPSManager.currentMovementPattern.rawValue.uppercased())
-                        .font(.caption2)
-                        .fontWeight(.medium)
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal)
-                    
+                    Text(
+                        locationManager.adaptiveGPSManager.currentMovementPattern.rawValue
+                            .uppercased()
+                    )
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal)
+
                     // Update frequency
-                    Text("\(String(format: "%.1f", locationManager.adaptiveGPSManager.currentUpdateFrequencyHz))Hz")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal)
+                    Text(
+                        "\(String(format: "%.1f",
+                                  locationManager.adaptiveGPSManager.currentUpdateFrequencyHz))Hz"
+                    )
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal)
                 }
-                
+
                 // Battery alert if needed
                 if locationManager.shouldShowBatteryAlert {
                     HStack {
@@ -235,7 +260,7 @@ struct ActiveTrackingView: View {
                     .padding(.horizontal)
                     .padding(.top, 2)
                 }
-                
+
                 // Weather alerts
                 ForEach(locationManager.weatherAlerts, id: \.title) { alert in
                     HStack {
@@ -252,7 +277,7 @@ struct ActiveTrackingView: View {
             }
             .padding(.vertical, 8)
             .background(Color(.systemGray6))
-            
+
             // Main metrics
             ScrollView {
                 VStack(spacing: 20) {
@@ -263,7 +288,7 @@ struct ActiveTrackingView: View {
                         icon: "map",
                         color: .blue
                     )
-                    
+
                     // Time card
                     MetricCard(
                         title: "TIME",
@@ -271,7 +296,7 @@ struct ActiveTrackingView: View {
                         icon: "clock",
                         color: .green
                     )
-                    
+
                     // Pace card
                     MetricCard(
                         title: "PACE",
@@ -279,17 +304,18 @@ struct ActiveTrackingView: View {
                         icon: "speedometer",
                         color: .orange
                     )
-                    
+
                     // Load weight card
                     if let session = locationManager.currentSession {
-                        MetricCard(
-                            title: "LOAD",
-                            value: String(format: "%.0f lbs", session.loadWeight * 2.20462),
-                            icon: "backpack",
-                            color: .purple
+                        LoadWeightCard(
+                            currentWeight: session.loadWeight,
+                            onAdjustTapped: {
+                                triggerHapticFeedback(.light)
+                                showLoadWeightAdjustment = true
+                            }
                         )
                     }
-                    
+
                     // Current grade card
                     MetricCard(
                         title: "GRADE",
@@ -297,7 +323,7 @@ struct ActiveTrackingView: View {
                         icon: currentGrade >= 0 ? "arrow.up.right" : "arrow.down.right",
                         color: gradeColor
                     )
-                    
+
                     // Calorie metrics row
                     HStack(spacing: 12) {
                         CalorieMetricCard(
@@ -307,7 +333,7 @@ struct ActiveTrackingView: View {
                             color: .red,
                             weatherImpact: showCalorieImpact ? weatherImpactPercentage : nil
                         )
-                        
+
                         MetricCard(
                             title: "BURN RATE",
                             value: formattedCalorieBurnRate,
@@ -315,7 +341,7 @@ struct ActiveTrackingView: View {
                             color: .orange
                         )
                     }
-                    
+
                     // Elevation metrics row
                     HStack(spacing: 12) {
                         ElevationMetricCard(
@@ -324,7 +350,7 @@ struct ActiveTrackingView: View {
                             icon: "arrow.up",
                             color: .green
                         )
-                        
+
                         ElevationMetricCard(
                             title: "LOSS",
                             value: formattedElevationLoss,
@@ -332,7 +358,7 @@ struct ActiveTrackingView: View {
                             color: .red
                         )
                     }
-                    
+
                     // Weather information
                     if let weather = locationManager.currentWeatherConditions {
                         WeatherCard(
@@ -343,26 +369,38 @@ struct ActiveTrackingView: View {
                 }
                 .padding()
             }
-            
+
             // Control buttons
             VStack(spacing: 15) {
                 // Pause/Resume button
-                Button(action: { locationManager.togglePause() }) {
+                Button(action: {
+                    triggerHapticFeedback(.impact)
+                    locationManager.togglePause()
+                }) {
                     HStack {
-                        Image(systemName: locationManager.trackingState == .paused ? "play.fill" : "pause.fill")
+                        Image(
+                            systemName: locationManager
+                                .trackingState == .paused ? "play.fill" : "pause.fill"
+                        )
                         Text(locationManager.trackingState == .paused ? "Resume" : "Pause")
                     }
                     .font(.title3)
                     .fontWeight(.semibold)
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(locationManager.trackingState == .paused ? Color.green : Color.orange)
+                    .background(
+                        locationManager.trackingState == .paused ? Color.green : Color
+                            .orange
+                    )
                     .foregroundColor(.white)
                     .cornerRadius(12)
                 }
-                
+
                 // Stop button
-                Button(action: { showEndConfirmation = true }) {
+                Button(action: {
+                    triggerHapticFeedback(.warning)
+                    showEndConfirmation = true
+                }) {
                     HStack {
                         Image(systemName: "stop.fill")
                         Text("End Ruck")
@@ -387,42 +425,449 @@ struct ActiveTrackingView: View {
             }
         }
         .alert("End Ruck?", isPresented: $showEndConfirmation) {
-            Button("Cancel", role: .cancel) { }
+            Button("Cancel", role: .cancel) {}
             Button("End", role: .destructive) {
                 locationManager.stopTracking()
-                try? modelContext.save()
+                do {
+                    try modelContext.save()
+                } catch {
+                    // Log error - in production app, show user-friendly error
+                    showSaveError = true
+                }
             }
         } message: {
             Text("Are you sure you want to end this ruck session?")
         }
-        .task {
-            // Update elevation metrics periodically
+        .alert("Save Error", isPresented: $showSaveError) {
+            Button("OK") {}
+        } message: {
+            Text("Failed to save ruck session. Please try again.")
+        }
+        .task { [weak locationManager] in
+            // Medium-frequency updates for elevation and GPS
             while !Task.isCancelled {
+                guard let locationManager else { break }
+
                 totalElevationGain = locationManager.elevationManager.elevationGain
                 totalElevationLoss = locationManager.elevationManager.elevationLoss
                 currentGrade = locationManager.elevationManager.currentGrade
-                
+
+                // Update GPS timestamp when we have a current location
+                if locationManager.currentLocation != nil {
+                    lastGPSUpdate = Date()
+                }
+
                 try? await Task.sleep(for: .seconds(2))
             }
         }
+        .onAppear {
+            setupHaptics()
+            startAnimations()
+        }
+        .onDisappear {
+            // Ensure haptic engine is properly stopped
+            hapticEngine?.stop()
+            hapticEngine = nil
+        }
+        .sheet(isPresented: $showLoadWeightAdjustment) {
+            if let session = locationManager.currentSession {
+                LoadWeightAdjustmentView(
+                    currentWeight: session.loadWeight,
+                    onSave: { newWeight in
+                        triggerHapticFeedback(.success)
+                        updateLoadWeight(newWeight)
+                        showLoadWeightAdjustment = false
+                    },
+                    onCancel: {
+                        triggerHapticFeedback(.light)
+                        showLoadWeightAdjustment = false
+                    }
+                )
+            }
+        }
+        .task {
+            // High-frequency UI updates for 60fps
+            while !Task.isCancelled {
+                await updateAnimatedMetrics()
+                try? await Task.sleep(for: .milliseconds(16))
+            }
+        }
     }
-    
+
     // MARK: - Helper Functions
-    
+
     private func weatherAlertIcon(_ severity: WeatherAlertSeverity) -> String {
         switch severity {
-        case .info: return "info.circle"
-        case .warning: return "exclamationmark.triangle"
-        case .critical: return "exclamationmark.octagon"
+        case .info: "info.circle"
+        case .warning: "exclamationmark.triangle"
+        case .critical: "exclamationmark.octagon"
         }
     }
-    
+
     private func weatherAlertColor(_ severity: WeatherAlertSeverity) -> Color {
         switch severity {
-        case .info: return .blue
-        case .warning: return .orange
-        case .critical: return .red
+        case .info: .blue
+        case .warning: .orange
+        case .critical: .red
         }
+    }
+
+    // MARK: - Enhanced Methods
+
+    private func setupHaptics() {
+        guard CHHapticEngine.capabilitiesForHardware().supportsHaptics else {
+            // Device doesn't support haptics - gracefully degrade
+            return
+        }
+
+        do {
+            hapticEngine = try CHHapticEngine()
+            try hapticEngine?.start()
+
+            // Set up handlers for engine reset
+            hapticEngine?.resetHandler = { [weak self] in
+                // Attempt to restart the engine
+                do {
+                    try self?.hapticEngine?.start()
+                } catch {
+                    // Haptics unavailable - continue without them
+                    self?.hapticEngine = nil
+                }
+            }
+
+            hapticEngine?.stoppedHandler = { _ in
+                // Engine stopped - haptics will be unavailable
+                // In production, could log this for debugging
+            }
+        } catch {
+            // Failed to start haptic engine - continue without haptics
+            hapticEngine = nil
+        }
+    }
+
+    private func triggerHapticFeedback(_ type: HapticFeedbackType) {
+        switch type {
+        case .light:
+            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+            impactFeedback.impactOccurred()
+        case .impact:
+            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+            impactFeedback.impactOccurred()
+        case .warning:
+            let notificationFeedback = UINotificationFeedbackGenerator()
+            notificationFeedback.notificationOccurred(.warning)
+        case .success:
+            let notificationFeedback = UINotificationFeedbackGenerator()
+            notificationFeedback.notificationOccurred(.success)
+        }
+    }
+
+    private func startAnimations() {
+        animatedDistance = locationManager.totalDistance
+        animatedCalories = locationManager.totalCaloriesBurned
+        animatedPace = locationManager.currentPace
+    }
+
+    @MainActor
+    private func updateAnimatedMetrics() async {
+        let targetDistance = locationManager.totalDistance
+        let targetCalories = locationManager.totalCaloriesBurned
+        let targetPace = locationManager.currentPace
+
+        // Smooth interpolation for metrics
+        let interpolationFactor = 0.1
+
+        withAnimation(.easeOut(duration: 0.5)) {
+            animatedDistance += (targetDistance - animatedDistance) * interpolationFactor
+            animatedCalories += (targetCalories - animatedCalories) * interpolationFactor
+            animatedPace += (targetPace - animatedPace) * interpolationFactor
+        }
+    }
+
+    private func updateLoadWeight(_ newWeight: Double) {
+        guard let session = locationManager.currentSession else {
+            return
+        }
+
+        isLoading = true
+
+        Task {
+            // Update the session load weight
+            session.loadWeight = newWeight
+
+            // Note: Calorie recalculation will happen automatically on next update cycle
+            // as the calorie calculator uses the current session's weight
+
+            await MainActor.run {
+                isLoading = false
+            }
+        }
+    }
+
+    // MARK: - Haptic Feedback Types
+
+    enum HapticFeedbackType {
+        case light
+        case impact
+        case warning
+        case success
+    }
+}
+
+// MARK: - Enhanced Components
+
+struct LoadWeightCard: View {
+    let currentWeight: Double
+    let onAdjustTapped: () -> Void
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack {
+                Image(systemName: "backpack")
+                    .font(.title2)
+                    .foregroundColor(.purple)
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("LOAD")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.secondary)
+
+                    Button(action: onAdjustTapped) {
+                        HStack(spacing: 4) {
+                            Text("ADJUST")
+                                .font(.caption2)
+                                .fontWeight(.bold)
+                            Image(systemName: "slider.horizontal.3")
+                                .font(.caption2)
+                        }
+                        .foregroundColor(.purple)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule()
+                                .fill(Color.purple.opacity(0.1))
+                                .stroke(Color.purple.opacity(0.3), lineWidth: 1)
+                        )
+                    }
+                    .accessibilityLabel("Adjust load weight")
+                    .accessibilityHint("Double tap to change the carried weight")
+                }
+            }
+
+            Text(String(format: "%.0f lbs", currentWeight * 2.20462))
+                .font(.system(size: 36, weight: .bold, design: .rounded))
+                .foregroundColor(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(15)
+        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+    }
+}
+
+struct LoadWeightAdjustmentView: View {
+    @State private var weight: Double
+    let onSave: (Double) -> Void
+    let onCancel: () -> Void
+
+    init(
+        currentWeight: Double,
+        onSave: @escaping (Double) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        _weight = State(initialValue: currentWeight)
+        self.onSave = onSave
+        self.onCancel = onCancel
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                VStack(spacing: 8) {
+                    Text("Adjust Load Weight")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+
+                    Text("This will recalculate your calories burned")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+
+                VStack(spacing: 16) {
+                    Text(String(format: "%.0f lbs", weight * 2.20462))
+                        .font(.system(size: 48, weight: .bold, design: .rounded))
+                        .foregroundColor(.purple)
+
+                    HStack {
+                        Text("5 lbs")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        Slider(
+                            value: $weight,
+                            in: 2.27 ... 68,
+                            step: 2.27
+                        ) // 5-150 lbs in 5 lb increments
+                        .tint(.purple)
+
+                        Text("150 lbs")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Spacer()
+            }
+            .padding()
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel", action: onCancel)
+                }
+
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        // Validate weight is realistic (at least 5 lbs / 2.27 kg)
+                        let validatedWeight = max(2.27, weight)
+                        onSave(validatedWeight)
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(weight < 2.27) // Disable if less than 5 lbs
+                }
+            }
+            .navigationTitle("Load Weight")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+}
+
+struct EnhancedMetricCard: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
+    let isAnimating: Bool
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.title2)
+                    .foregroundColor(color)
+                    .symbolEffect(.pulse, isActive: isAnimating)
+                Spacer()
+                Text(title)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.secondary)
+            }
+
+            Text(value)
+                .font(.system(size: 36, weight: .bold, design: .rounded))
+                .foregroundColor(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentTransition(.numericText())
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(15)
+        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title): \(value)")
+    }
+}
+
+struct EnhancedCalorieMetricCard: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
+    let weatherImpact: Int?
+    let isAnimating: Bool
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.title2)
+                    .foregroundColor(color)
+                    .symbolEffect(.pulse, isActive: isAnimating)
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(title)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.secondary)
+
+                    // Weather impact indicator
+                    if let impact = weatherImpact, impact != 0 {
+                        HStack(spacing: 2) {
+                            Image(systemName: "cloud.fill")
+                                .font(.caption2)
+                                .foregroundColor(.blue)
+                            Text("\(impact >= 0 ? "+" : "")\(impact)%")
+                                .font(.caption2)
+                                .fontWeight(.medium)
+                                .foregroundColor(impact > 0 ? .orange : .green)
+                        }
+                        .accessibilityLabel("Weather impact: \(impact) percent")
+                    }
+                }
+            }
+
+            Text(value)
+                .font(.system(size: 36, weight: .bold, design: .rounded))
+                .foregroundColor(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentTransition(.numericText())
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(15)
+        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "\(title): \(value)" +
+                (weatherImpact.map { ", weather impact \($0) percent" } ?? "")
+        )
+    }
+}
+
+struct EnhancedElevationMetricCard: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
+    let isAnimating: Bool
+
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.title3)
+                    .foregroundColor(color)
+                    .symbolEffect(.bounce, value: isAnimating)
+                Spacer()
+                Text(title)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.secondary)
+            }
+
+            Text(value)
+                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .foregroundColor(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentTransition(.numericText())
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 3, x: 0, y: 1)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Elevation \(title.lowercased()): \(value)")
     }
 }
 
@@ -431,7 +876,7 @@ struct MetricCard: View {
     let value: String
     let icon: String
     let color: Color
-    
+
     var body: some View {
         VStack(spacing: 10) {
             HStack {
@@ -444,7 +889,7 @@ struct MetricCard: View {
                     .fontWeight(.semibold)
                     .foregroundColor(.secondary)
             }
-            
+
             Text(value)
                 .font(.system(size: 36, weight: .bold, design: .rounded))
                 .foregroundColor(.primary)
@@ -462,7 +907,7 @@ struct ElevationMetricCard: View {
     let value: String
     let icon: String
     let color: Color
-    
+
     var body: some View {
         VStack(spacing: 8) {
             HStack {
@@ -475,7 +920,7 @@ struct ElevationMetricCard: View {
                     .fontWeight(.semibold)
                     .foregroundColor(.secondary)
             }
-            
+
             Text(value)
                 .font(.system(size: 20, weight: .bold, design: .rounded))
                 .foregroundColor(.primary)
@@ -494,7 +939,7 @@ struct CalorieMetricCard: View {
     let icon: String
     let color: Color
     let weatherImpact: Int?
-    
+
     var body: some View {
         VStack(spacing: 10) {
             HStack {
@@ -507,7 +952,7 @@ struct CalorieMetricCard: View {
                         .font(.caption)
                         .fontWeight(.semibold)
                         .foregroundColor(.secondary)
-                    
+
                     // Weather impact indicator
                     if let impact = weatherImpact, impact != 0 {
                         HStack(spacing: 2) {
@@ -522,7 +967,7 @@ struct CalorieMetricCard: View {
                     }
                 }
             }
-            
+
             Text(value)
                 .font(.system(size: 36, weight: .bold, design: .rounded))
                 .foregroundColor(.primary)
@@ -540,43 +985,43 @@ struct CalorieMetricCard: View {
 struct WeatherCard: View {
     let conditions: WeatherConditions
     let showCalorieImpact: Bool
-    
+
     var body: some View {
         VStack(spacing: 12) {
             HStack {
                 Image(systemName: "cloud.fill")
                     .font(.title3)
                     .foregroundColor(.blue)
-                
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Weather")
                         .font(.caption)
                         .fontWeight(.semibold)
                         .foregroundColor(.secondary)
-                    
+
                     Text("\(Int(conditions.temperatureFahrenheit))°F")
                         .font(.headline)
                         .fontWeight(.bold)
                 }
-                
+
                 Spacer()
-                
+
                 if showCalorieImpact {
                     calorieImpactBadge
                 }
             }
-            
+
             HStack(spacing: 16) {
                 weatherDetail(
                     icon: "humidity.fill",
                     value: "\(Int(conditions.humidity))%"
                 )
-                
+
                 weatherDetail(
                     icon: "wind.circle.fill",
                     value: "\(Int(conditions.windSpeedMPH)) mph"
                 )
-                
+
                 if let description = conditions.weatherDescription {
                     Text(description.prefix(10))
                         .font(.caption2)
@@ -590,23 +1035,23 @@ struct WeatherCard: View {
         .cornerRadius(15)
         .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
     }
-    
+
     private var calorieImpactBadge: some View {
         let adjustmentFactor = conditions.temperatureAdjustmentFactor
         let percentage = Int((adjustmentFactor - 1.0) * 100)
-        
+
         return VStack(spacing: 2) {
             Image(systemName: "flame.fill")
                 .font(.caption2)
                 .foregroundColor(.orange)
-            
+
             Text("\(percentage >= 0 ? "+" : "")\(percentage)%")
                 .font(.caption2)
                 .fontWeight(.medium)
                 .foregroundColor(percentage > 0 ? .orange : .green)
         }
     }
-    
+
     private func weatherDetail(icon: String, value: String) -> some View {
         HStack(spacing: 4) {
             Image(systemName: icon)
