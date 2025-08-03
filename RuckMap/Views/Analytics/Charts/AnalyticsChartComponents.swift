@@ -510,7 +510,9 @@ struct PaceTrendChart: View {
         let relativeXPosition = location.x - origin.x
         
         if let weekDate = proxy.value(atX: relativeXPosition, as: Date.self) {
-            selectedDataPoint = weeklyData.min(by: { week1, week2 in
+            // Find the closest data point from optimized data first, fallback to original data
+            let dataToSearch = optimizedData.displayData.isEmpty ? weeklyData : optimizedData.displayData
+            selectedDataPoint = dataToSearch.min(by: { week1, week2 in
                 abs(week1.weekStart.timeIntervalSince(weekDate)) < 
                 abs(week2.weekStart.timeIntervalSince(weekDate))
             })
@@ -792,9 +794,13 @@ struct WeightMovedChart: View {
         
         let totalWeightMoved = weightMovedData.reduce(0) { $0 + $1.weightMoved }
         let averageWeightMoved = totalWeightMoved / Double(weightMovedData.count)
-        let maxWeightMoved = weightMovedData.max { $0.weightMoved < $1.weightMoved }!
+        let maxWeightMoved = weightMovedData.max { $0.weightMoved < $1.weightMoved }
         
-        let summary = "Weight moved chart shows \(weightMovedData.count) weeks of data. Total weight moved: \(totalWeightMoved, format: .number.precision(.fractionLength(1))) kilograms times kilometers. Average per week: \(averageWeightMoved, format: .number.precision(.fractionLength(1))). Peak week: \(maxWeightMoved.weightMoved, format: .number.precision(.fractionLength(1)))."
+        var summary = "Weight moved chart shows \(weightMovedData.count) weeks of data. Total weight moved: \(totalWeightMoved, format: .number.precision(.fractionLength(1))) kilograms times kilometers. Average per week: \(averageWeightMoved, format: .number.precision(.fractionLength(1)))."
+        
+        if let maxWeightMoved = maxWeightMoved {
+            summary += " Peak week: \(maxWeightMoved.weightMoved, format: .number.precision(.fractionLength(1)))."
+        }
         
         accessibilityManager.announceMessage(summary)
     }

@@ -10,7 +10,9 @@ actor AnalyticsRepository {
   // MARK: - Cache Management
   
   private var analyticsCache: [String: CachedAnalytics] = [:]
-  private let cacheExpirationInterval: TimeInterval = 300 // 5 minutes
+  private var personalRecordsCache: CachedPersonalRecords?
+  private var weeklyAnalyticsCache: [String: CachedWeeklyAnalytics] = [:]
+  private static let cacheExpirationInterval: TimeInterval = 300 // 5 minutes
   
   /// Cached analytics data with timestamp
   private struct CachedAnalytics {
@@ -18,7 +20,27 @@ actor AnalyticsRepository {
     let timestamp: Date
     
     var isExpired: Bool {
-      Date().timeIntervalSince(timestamp) > 300 // 5 minutes
+      Date().timeIntervalSince(timestamp) > AnalyticsRepository.cacheExpirationInterval
+    }
+  }
+  
+  /// Cached personal records with timestamp
+  private struct CachedPersonalRecords {
+    let records: PersonalRecords
+    let timestamp: Date
+    
+    var isExpired: Bool {
+      Date().timeIntervalSince(timestamp) > AnalyticsRepository.cacheExpirationInterval
+    }
+  }
+  
+  /// Cached weekly analytics with timestamp
+  private struct CachedWeeklyAnalytics {
+    let data: WeeklyAnalyticsData
+    let timestamp: Date
+    
+    var isExpired: Bool {
+      Date().timeIntervalSince(timestamp) > AnalyticsRepository.cacheExpirationInterval
     }
   }
   
@@ -61,18 +83,23 @@ actor AnalyticsRepository {
   
   /// Fetches personal records across all sessions
   func fetchPersonalRecords() async throws -> PersonalRecords {
-    let cacheKey = "personal_records"
-    
     // Check if we have cached personal records
-    if let cached = analyticsCache[cacheKey], !cached.isExpired {
-      // Extract personal records from cached analytics data
-      // Note: We need to store PersonalRecords separately for better caching
-      logger.debug("Computing personal records from all sessions")
+    if let cached = personalRecordsCache, !cached.isExpired {
+      logger.debug("Returning cached personal records")
+      return cached.records
     }
+    
+    logger.info("Computing fresh personal records")
     
     // Fetch all completed sessions
     let allSessions = try await fetchAllCompletedSessions()
     let personalRecords = PersonalRecords(sessions: allSessions)
+    
+    // Cache the result
+    personalRecordsCache = CachedPersonalRecords(
+      records: personalRecords,
+      timestamp: Date()
+    )
     
     return personalRecords
   }
@@ -81,10 +108,12 @@ actor AnalyticsRepository {
   func fetchWeeklyAnalyticsData(numberOfWeeks: Int = 12) async throws -> WeeklyAnalyticsData {
     let cacheKey = "weekly_analytics_\(numberOfWeeks)"
     
-    if let cached = analyticsCache[cacheKey], !cached.isExpired {
-      // We need to extract WeeklyAnalyticsData from cache or store it separately
-      logger.debug("Computing fresh weekly analytics data")
+    if let cached = weeklyAnalyticsCache[cacheKey], !cached.isExpired {
+      logger.debug("Returning cached weekly analytics data")
+      return cached.data
     }
+    
+    logger.info("Computing fresh weekly analytics data")
     
     // Fetch sessions from the last N weeks
     let calendar = Calendar.current
@@ -96,6 +125,12 @@ actor AnalyticsRepository {
     
     let sessions = try await fetchSessions(from: startDate, to: endDate)
     let weeklyData = WeeklyAnalyticsData(sessions: sessions, numberOfWeeks: numberOfWeeks)
+    
+    // Cache the result
+    weeklyAnalyticsCache[cacheKey] = CachedWeeklyAnalytics(
+      data: weeklyData,
+      timestamp: Date()
+    )
     
     return weeklyData
   }
@@ -189,7 +224,8 @@ actor AnalyticsRepository {
     ]
     
     // Add fetch limit to prevent memory issues
-    descriptor.fetchLimit = 5000 // Reasonable limit for personal records
+    // Process in batches if needed for very large datasets
+    descriptor.fetchLimit = 1000 // More conservative limit for better performance
     
     return try modelContext.fetch(descriptor)
   }

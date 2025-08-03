@@ -338,23 +338,24 @@ enum MetricType: Sendable {
 
 /// Tracks personal records across all sessions
 struct PersonalRecords: Sendable {
-  let longestDistance: PersonalRecord<Double>
-  let fastestPace: PersonalRecord<Double>
-  let heaviestLoad: PersonalRecord<Double>
-  let highestCalorieBurn: PersonalRecord<Double>
-  let longestDuration: PersonalRecord<TimeInterval>
-  let mostWeightMoved: PersonalRecord<Double>
+  let longestDistance: PersonalRecord<Double>?
+  let fastestPace: PersonalRecord<Double>?
+  let heaviestLoad: PersonalRecord<Double>?
+  let highestCalorieBurn: PersonalRecord<Double>?
+  let longestDuration: PersonalRecord<TimeInterval>?
+  let mostWeightMoved: PersonalRecord<Double>?
   
   init(sessions: [RuckSession]) {
     // Longest distance
-    if let maxDistanceSession = sessions.max(by: { $0.totalDistance < $1.totalDistance }) {
+    if let maxDistanceSession = sessions.max(by: { $0.totalDistance < $1.totalDistance }),
+       maxDistanceSession.totalDistance > 0 {
       self.longestDistance = PersonalRecord(
         value: maxDistanceSession.totalDistance,
         sessionId: maxDistanceSession.id,
         date: maxDistanceSession.startDate
       )
     } else {
-      self.longestDistance = PersonalRecord(value: 0, sessionId: UUID(), date: Date())
+      self.longestDistance = nil
     }
     
     // Fastest pace (lowest value is best)
@@ -365,40 +366,43 @@ struct PersonalRecords: Sendable {
         date: fastestSession.startDate
       )
     } else {
-      self.fastestPace = PersonalRecord(value: 0, sessionId: UUID(), date: Date())
+      self.fastestPace = nil
     }
     
     // Heaviest load
-    if let heaviestSession = sessions.max(by: { $0.loadWeight < $1.loadWeight }) {
+    if let heaviestSession = sessions.max(by: { $0.loadWeight < $1.loadWeight }),
+       heaviestSession.loadWeight > 0 {
       self.heaviestLoad = PersonalRecord(
         value: heaviestSession.loadWeight,
         sessionId: heaviestSession.id,
         date: heaviestSession.startDate
       )
     } else {
-      self.heaviestLoad = PersonalRecord(value: 0, sessionId: UUID(), date: Date())
+      self.heaviestLoad = nil
     }
     
     // Highest calorie burn
-    if let highestCalorieSession = sessions.max(by: { $0.totalCalories < $1.totalCalories }) {
+    if let highestCalorieSession = sessions.max(by: { $0.totalCalories < $1.totalCalories }),
+       highestCalorieSession.totalCalories > 0 {
       self.highestCalorieBurn = PersonalRecord(
         value: highestCalorieSession.totalCalories,
         sessionId: highestCalorieSession.id,
         date: highestCalorieSession.startDate
       )
     } else {
-      self.highestCalorieBurn = PersonalRecord(value: 0, sessionId: UUID(), date: Date())
+      self.highestCalorieBurn = nil
     }
     
     // Longest duration
-    if let longestSession = sessions.max(by: { $0.totalDuration < $1.totalDuration }) {
+    if let longestSession = sessions.max(by: { $0.totalDuration < $1.totalDuration }),
+       longestSession.totalDuration > 0 {
       self.longestDuration = PersonalRecord(
         value: longestSession.totalDuration,
         sessionId: longestSession.id,
         date: longestSession.startDate
       )
     } else {
-      self.longestDuration = PersonalRecord(value: 0, sessionId: UUID(), date: Date())
+      self.longestDuration = nil
     }
     
     // Most weight moved
@@ -409,13 +413,18 @@ struct PersonalRecords: Sendable {
     }
     
     if let bestSession = sessionWithMostWeightMoved {
-      self.mostWeightMoved = PersonalRecord(
-        value: bestSession.loadWeight * (bestSession.totalDistance / 1000.0),
-        sessionId: bestSession.id,
-        date: bestSession.startDate
-      )
+      let weightMoved = bestSession.loadWeight * (bestSession.totalDistance / 1000.0)
+      if weightMoved > 0 {
+        self.mostWeightMoved = PersonalRecord(
+          value: weightMoved,
+          sessionId: bestSession.id,
+          date: bestSession.startDate
+        )
+      } else {
+        self.mostWeightMoved = nil
+      }
     } else {
-      self.mostWeightMoved = PersonalRecord(value: 0, sessionId: UUID(), date: Date())
+      self.mostWeightMoved = nil
     }
   }
 }

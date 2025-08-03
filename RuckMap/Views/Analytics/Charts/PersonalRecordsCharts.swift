@@ -14,57 +14,76 @@ struct PersonalRecordsChart: View {
     @State private var showingDataTable = false
     
     private var recordData: [PersonalRecordData] {
-        [
-            PersonalRecordData(
+        var data: [PersonalRecordData] = []
+        
+        if let longestDistance = personalRecords.longestDistance {
+            data.append(PersonalRecordData(
                 type: .distance,
-                record: personalRecords.longestDistance.value / 1000.0, // Convert to km
+                record: longestDistance.value / 1000.0, // Convert to km
                 average: currentAnalytics.averageDistance / 1000.0,
                 unit: "km",
                 icon: "map",
                 color: Color(red: 0.18, green: 0.31, blue: 0.18)
-            ),
-            PersonalRecordData(
+            ))
+        }
+        
+        if let fastestPace = personalRecords.fastestPace {
+            data.append(PersonalRecordData(
                 type: .pace,
-                record: personalRecords.fastestPace.value,
+                record: fastestPace.value,
                 average: currentAnalytics.averagePace,
                 unit: "min/km",
                 icon: "speedometer",
                 color: .blue,
                 isLowerBetter: true
-            ),
-            PersonalRecordData(
+            ))
+        }
+        
+        if let heaviestLoad = personalRecords.heaviestLoad {
+            data.append(PersonalRecordData(
                 type: .load,
-                record: personalRecords.heaviestLoad.value,
+                record: heaviestLoad.value,
                 average: currentAnalytics.averageLoadWeight,
                 unit: "kg",
                 icon: "scalemass",
                 color: .orange
-            ),
-            PersonalRecordData(
+            ))
+        }
+        
+        if let highestCalorieBurn = personalRecords.highestCalorieBurn {
+            data.append(PersonalRecordData(
                 type: .calories,
-                record: personalRecords.highestCalorieBurn.value,
+                record: highestCalorieBurn.value,
                 average: currentAnalytics.averageCalories,
                 unit: "cal",
                 icon: "flame",
                 color: .red
-            ),
-            PersonalRecordData(
+            ))
+        }
+        
+        if let longestDuration = personalRecords.longestDuration {
+            data.append(PersonalRecordData(
                 type: .duration,
-                record: personalRecords.longestDuration.value / 3600.0, // Convert to hours
+                record: longestDuration.value / 3600.0, // Convert to hours
                 average: currentAnalytics.averageDuration / 3600.0,
                 unit: "hrs",
                 icon: "clock",
                 color: .purple
-            ),
-            PersonalRecordData(
+            ))
+        }
+        
+        if let mostWeightMoved = personalRecords.mostWeightMoved {
+            data.append(PersonalRecordData(
                 type: .weightMoved,
-                record: personalRecords.mostWeightMoved.value,
+                record: mostWeightMoved.value,
                 average: currentAnalytics.totalWeightMoved / Double(max(currentAnalytics.totalSessions, 1)),
                 unit: "kg×km",
                 icon: "arrow.up.and.down",
                 color: .teal
-            )
-        ].filter { $0.record > 0 } // Only show records that exist
+            ))
+        }
+        
+        return data.filter { $0.record > 0 } // Only show records that exist
     }
     
     struct PersonalRecordData: Identifiable {

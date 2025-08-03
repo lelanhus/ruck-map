@@ -11,6 +11,7 @@ class ChartAccessibilityManager: ObservableObject {
     private let hapticFeedback = UIImpactFeedbackGenerator(style: .medium)
     private let audioEngine = AVAudioEngine()
     private let player = AVAudioPlayerNode()
+    private var audioWorkItems: [DispatchWorkItem] = []
     
     @Published var isAudioGraphEnabled: Bool = false
     @Published var announceDataChanges: Bool = true
@@ -19,6 +20,17 @@ class ChartAccessibilityManager: ObservableObject {
     init() {
         setupAudioGraph()
         setupAccessibilityNotifications()
+    }
+    
+    deinit {
+        // Cancel any pending audio work items
+        audioWorkItems.forEach { $0.cancel() }
+        audioWorkItems.removeAll()
+        
+        // Clean up audio resources
+        player.stop()
+        audioEngine.stop()
+        audioEngine.reset()
     }
     
     // MARK: - Audio Graph Setup
@@ -62,6 +74,10 @@ class ChartAccessibilityManager: ObservableObject {
     }
     
     private func playToneSequence(_ normalizedData: [Double], metric: String) {
+        // Cancel any existing audio work items
+        audioWorkItems.forEach { $0.cancel() }
+        audioWorkItems.removeAll()
+        
         let baseFrequency: Float = 220.0 // A3
         let frequencyRange: Float = 440.0 // One octave
         let noteDuration: Float = 0.3
@@ -70,16 +86,22 @@ class ChartAccessibilityManager: ObservableObject {
             let frequency = baseFrequency + (Float(value) * frequencyRange)
             let delay = Float(index) * noteDuration
             
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(delay)) {
-                self.playTone(frequency: frequency, duration: noteDuration)
+            let workItem = DispatchWorkItem { [weak self] in
+                self?.playTone(frequency: frequency, duration: noteDuration)
             }
+            audioWorkItems.append(workItem)
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(delay), execute: workItem)
         }
         
         // Announce completion
         let totalDuration = Double(normalizedData.count) * Double(noteDuration)
-        DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration + 0.5) {
-            self.announceMessage("Audio graph complete for \(metric)")
+        let completionWorkItem = DispatchWorkItem { [weak self] in
+            self?.announceMessage("Audio graph complete for \(metric)")
         }
+        audioWorkItems.append(completionWorkItem)
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration + 0.5, execute: completionWorkItem)
     }
     
     private func playTone(frequency: Float, duration: Float) {
