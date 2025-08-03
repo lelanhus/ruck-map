@@ -1,48 +1,47 @@
-import XCTest
+import Testing
 import SwiftData
 @testable import RuckMap
 
-final class ExportManagerTests: XCTestCase {
-    var exportManager: ExportManager!
-    var testSession: RuckSession!
+@Suite("Export Manager Tests")
+struct ExportManagerTests {
+    let exportManager: ExportManager
+    let testSession: RuckSession
     
-    override func setUp() async throws {
-        try await super.setUp()
+    init() async throws {
         exportManager = ExportManager()
-        testSession = try createTestSession()
+        testSession = try Self.createTestSession()
     }
     
-    override func tearDown() async throws {
-        exportManager = nil
-        testSession = nil
-        
-        // Clean up any test files
-        try await cleanupTestFiles()
-        try await super.tearDown()
+    deinit {
+        Task {
+            try? await Self.cleanupTestFiles(exportManager: exportManager)
+        }
     }
     
     // MARK: - GPX Export Tests
     
+    @Test("GPX export creates valid file with correct content")
     func testGPXExport() async throws {
         let result = try await exportManager.exportToGPX(session: testSession)
         
-        XCTAssertEqual(result.format, .gpx)
-        XCTAssertGreaterThan(result.fileSize, 0)
-        XCTAssertEqual(result.pointCount, testSession.locationPoints.count)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: result.url.path))
+        #expect(result.format == .gpx)
+        #expect(result.fileSize > 0)
+        #expect(result.pointCount == testSession.locationPoints.count)
+        #expect(FileManager.default.fileExists(atPath: result.url.path))
         
         // Verify GPX content
         let gpxContent = try String(contentsOf: result.url)
-        XCTAssertTrue(gpxContent.contains("<?xml version=\"1.0\""))
-        XCTAssertTrue(gpxContent.contains("<gpx"))
-        XCTAssertTrue(gpxContent.contains("<trk>"))
-        XCTAssertTrue(gpxContent.contains("<trkpt"))
-        XCTAssertTrue(gpxContent.contains("lat=\""))
-        XCTAssertTrue(gpxContent.contains("lon=\""))
-        XCTAssertTrue(gpxContent.contains("<ele>"))
-        XCTAssertTrue(gpxContent.contains("<time>"))
+        #expect(gpxContent.contains("<?xml version=\"1.0\""))
+        #expect(gpxContent.contains("<gpx"))
+        #expect(gpxContent.contains("<trk>"))
+        #expect(gpxContent.contains("<trkpt"))
+        #expect(gpxContent.contains("lat=\""))
+        #expect(gpxContent.contains("lon=\""))
+        #expect(gpxContent.contains("<ele>"))
+        #expect(gpxContent.contains("<time>"))
     }
     
+    @Test("GPX export includes elevation extensions when data is available")
     func testGPXExportWithElevationData() async throws {
         // Add elevation data to location points
         for point in testSession.locationPoints {
@@ -60,57 +59,55 @@ final class ExportManagerTests: XCTestCase {
         let gpxContent = try String(contentsOf: result.url)
         
         // Verify elevation extensions
-        XCTAssertTrue(gpxContent.contains("<extensions>"))
-        XCTAssertTrue(gpxContent.contains("<elevation_accuracy>"))
-        XCTAssertTrue(gpxContent.contains("<elevation_confidence>"))
-        XCTAssertTrue(gpxContent.contains("<grade>"))
+        #expect(gpxContent.contains("<extensions>"))
+        #expect(gpxContent.contains("<elevation_accuracy>"))
+        #expect(gpxContent.contains("<elevation_confidence>"))
+        #expect(gpxContent.contains("<grade>"))
     }
     
+    @Test("GPX export throws error for empty session")
     func testGPXExportEmptySession() async throws {
         let emptySession = RuckSession()
         
-        do {
-            _ = try await exportManager.exportToGPX(session: emptySession)
-            XCTFail("Expected error for empty session")
-        } catch ExportManager.ExportError.noLocationData {
-            // Expected
-        } catch {
-            XCTFail("Unexpected error: \(error)")
+        await #expect(throws: ExportManager.ExportError.noLocationData) {
+            try await exportManager.exportToGPX(session: emptySession)
         }
     }
     
     // MARK: - CSV Export Tests
     
+    @Test("CSV export creates valid file with proper structure")
     func testCSVExport() async throws {
         let result = try await exportManager.exportToCSV(session: testSession)
         
-        XCTAssertEqual(result.format, .csv)
-        XCTAssertGreaterThan(result.fileSize, 0)
-        XCTAssertEqual(result.pointCount, testSession.locationPoints.count)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: result.url.path))
+        #expect(result.format == .csv)
+        #expect(result.fileSize > 0)
+        #expect(result.pointCount == testSession.locationPoints.count)
+        #expect(FileManager.default.fileExists(atPath: result.url.path))
         
         // Verify CSV content
         let csvContent = try String(contentsOf: result.url)
         let lines = csvContent.components(separatedBy: .newlines).filter { !$0.isEmpty }
         
         // Should have header + data rows
-        XCTAssertEqual(lines.count, testSession.locationPoints.count + 1)
+        #expect(lines.count == testSession.locationPoints.count + 1)
         
         // Verify header
         let header = lines[0]
-        XCTAssertTrue(header.contains("timestamp"))
-        XCTAssertTrue(header.contains("latitude"))
-        XCTAssertTrue(header.contains("longitude"))
-        XCTAssertTrue(header.contains("altitude"))
-        XCTAssertTrue(header.contains("speed"))
+        #expect(header.contains("timestamp"))
+        #expect(header.contains("latitude"))
+        #expect(header.contains("longitude"))
+        #expect(header.contains("altitude"))
+        #expect(header.contains("speed"))
         
         // Verify data rows
         for i in 1..<lines.count {
             let fields = lines[i].components(separatedBy: ",")
-            XCTAssertGreaterThanOrEqual(fields.count, 10) // Should have at least 10 fields
+            #expect(fields.count >= 10) // Should have at least 10 fields
         }
     }
     
+    @Test("CSV export includes all available data fields")
     func testCSVExportWithAllData() async throws {
         // Add comprehensive data to location points
         for (index, point) in testSession.locationPoints.enumerated() {
@@ -126,76 +123,81 @@ final class ExportManagerTests: XCTestCase {
         let csvContent = try String(contentsOf: result.url)
         
         // Verify all data is present
-        XCTAssertTrue(csvContent.contains("140")) // Heart rate
-        XCTAssertTrue(csvContent.contains("1.5")) // Elevation accuracy
-        XCTAssertTrue(csvContent.contains("0.8")) // Elevation confidence
-        XCTAssertTrue(csvContent.contains("101.3")) // Pressure
-        XCTAssertTrue(csvContent.contains("true")) // Key point
+        #expect(csvContent.contains("140")) // Heart rate
+        #expect(csvContent.contains("1.5")) // Elevation accuracy
+        #expect(csvContent.contains("0.8")) // Elevation confidence
+        #expect(csvContent.contains("101.3")) // Pressure
+        #expect(csvContent.contains("true")) // Key point
     }
     
     // MARK: - JSON Export Tests
     
+    @Test("JSON export creates valid file with complete data structure")
     func testJSONExport() async throws {
         let result = try await exportManager.exportToJSON(session: testSession)
         
-        XCTAssertEqual(result.format, .json)
-        XCTAssertGreaterThan(result.fileSize, 0)
-        XCTAssertEqual(result.pointCount, testSession.locationPoints.count)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: result.url.path))
+        #expect(result.format == .json)
+        #expect(result.fileSize > 0)
+        #expect(result.pointCount == testSession.locationPoints.count)
+        #expect(FileManager.default.fileExists(atPath: result.url.path))
         
         // Verify JSON content
         let jsonData = try Data(contentsOf: result.url)
         let exportedSession = try JSONDecoder().decode(ExportManager.ExportableSession.self, from: jsonData)
         
-        XCTAssertEqual(exportedSession.id, testSession.id.uuidString)
-        XCTAssertEqual(exportedSession.loadWeight, testSession.loadWeight)
-        XCTAssertEqual(exportedSession.locationPoints.count, testSession.locationPoints.count)
+        #expect(exportedSession.id == testSession.id.uuidString)
+        #expect(exportedSession.loadWeight == testSession.loadWeight)
+        #expect(exportedSession.locationPoints.count == testSession.locationPoints.count)
         
         // Verify location point data
         let firstPoint = exportedSession.locationPoints[0]
         let originalPoint = testSession.locationPoints[0]
-        XCTAssertEqual(firstPoint.latitude, originalPoint.latitude)
-        XCTAssertEqual(firstPoint.longitude, originalPoint.longitude)
-        XCTAssertEqual(firstPoint.altitude, originalPoint.altitude)
+        #expect(firstPoint.latitude == originalPoint.latitude)
+        #expect(firstPoint.longitude == originalPoint.longitude)
+        #expect(firstPoint.altitude == originalPoint.altitude)
     }
     
     // MARK: - Batch Export Tests
     
+    @Test("Batch export processes multiple sessions correctly")
     func testBatchExport() async throws {
-        let session2 = try createTestSession()
-        let sessions = [testSession!, session2]
+        let session2 = try Self.createTestSession()
+        let sessions = [testSession, session2]
         
         let results = try await exportManager.exportBatch(sessions: sessions, format: .gpx)
         
-        XCTAssertEqual(results.count, 2)
+        #expect(results.count == 2)
         
         for result in results {
-            XCTAssertEqual(result.format, .gpx)
-            XCTAssertGreaterThan(result.fileSize, 0)
-            XCTAssertTrue(FileManager.default.fileExists(atPath: result.url.path))
+            #expect(result.format == .gpx)
+            #expect(result.fileSize > 0)
+            #expect(FileManager.default.fileExists(atPath: result.url.path))
         }
     }
     
+    @Test("Batch export handles failures gracefully")
     func testBatchExportWithFailures() async throws {
         let emptySession = RuckSession() // This will fail export
-        let sessions = [testSession!, emptySession]
+        let sessions = [testSession, emptySession]
         
         let results = try await exportManager.exportBatch(sessions: sessions, format: .gpx)
         
         // Should succeed for valid session, skip invalid one
-        XCTAssertEqual(results.count, 1)
-        XCTAssertEqual(results[0].format, .gpx)
+        #expect(results.count == 1)
+        #expect(results[0].format == .gpx)
     }
     
     // MARK: - File Management Tests
     
+    @Test("Exports directory is created and accessible")
     func testExportsDirectory() async throws {
         let exportsDir = try await exportManager.getExportsDirectory()
         
-        XCTAssertTrue(FileManager.default.fileExists(atPath: exportsDir.path))
-        XCTAssertTrue(exportsDir.path.contains("Exports"))
+        #expect(FileManager.default.fileExists(atPath: exportsDir.path))
+        #expect(exportsDir.path.contains("Exports"))
     }
     
+    @Test("Save export permanently moves file correctly")
     func testSaveExportPermanently() async throws {
         let result = try await exportManager.exportToGPX(session: testSession)
         let tempURL = result.url
@@ -206,12 +208,13 @@ final class ExportManagerTests: XCTestCase {
             filename: filename
         )
         
-        XCTAssertTrue(FileManager.default.fileExists(atPath: permanentURL.path))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: tempURL.path)) // Should be cleaned up
-        XCTAssertTrue(permanentURL.path.contains("Exports"))
-        XCTAssertTrue(permanentURL.lastPathComponent == filename)
+        #expect(FileManager.default.fileExists(atPath: permanentURL.path))
+        #expect(!FileManager.default.fileExists(atPath: tempURL.path)) // Should be cleaned up
+        #expect(permanentURL.path.contains("Exports"))
+        #expect(permanentURL.lastPathComponent == filename)
     }
     
+    @Test("Cleanup old exports removes files older than specified days")
     func testCleanupOldExports() async throws {
         let exportsDir = try await exportManager.getExportsDirectory()
         
@@ -239,9 +242,9 @@ final class ExportManagerTests: XCTestCase {
         try await exportManager.cleanupOldExports(olderThan: 7)
         
         // Old files should be deleted, recent file should remain
-        XCTAssertFalse(FileManager.default.fileExists(atPath: oldFile1.path))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: oldFile2.path))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: recentFile.path))
+        #expect(!FileManager.default.fileExists(atPath: oldFile1.path))
+        #expect(!FileManager.default.fileExists(atPath: oldFile2.path))
+        #expect(FileManager.default.fileExists(atPath: recentFile.path))
         
         // Clean up test file
         try? FileManager.default.removeItem(at: recentFile)
@@ -249,28 +252,46 @@ final class ExportManagerTests: XCTestCase {
     
     // MARK: - Performance Tests
     
+    @Test("Large session export completes within reasonable time", .timeLimit(.seconds(30)))
     func testLargeSessionExport() async throws {
         // Create session with many location points
-        let largeSession = try createLargeTestSession(pointCount: 5000)
+        let largeSession = try Self.createLargeTestSession(pointCount: 5000)
         
         let startTime = CFAbsoluteTimeGetCurrent()
         let result = try await exportManager.exportToGPX(session: largeSession)
         let endTime = CFAbsoluteTimeGetCurrent()
         
-        XCTAssertEqual(result.pointCount, 5000)
-        XCTAssertGreaterThan(result.fileSize, 0)
-        XCTAssertLessThan(endTime - startTime, 30.0) // Should complete within 30 seconds
+        #expect(result.pointCount == 5000)
+        #expect(result.fileSize > 0)
+        #expect(endTime - startTime < 30.0) // Should complete within 30 seconds
         
         print("Exported \(result.pointCount) points in \(String(format: "%.3f", endTime - startTime))s")
     }
     
     // MARK: - Error Handling Tests
     
-    func testExportInvalidFormat() async throws {
-        // This would be tested if we had invalid format scenarios
-        // For now, the enum prevents invalid formats at compile time
+    @Test("Export format validation is handled at compile time")
+    func testExportFormatValidation() async throws {
+        // This test verifies that the enum prevents invalid formats at compile time
+        // We can test all valid formats work correctly
+        let formats: [ExportManager.ExportFormat] = [.gpx, .csv, .json]
+        
+        for format in formats {
+            switch format {
+            case .gpx:
+                let result = try await exportManager.exportToGPX(session: testSession)
+                #expect(result.format == .gpx)
+            case .csv:
+                let result = try await exportManager.exportToCSV(session: testSession)
+                #expect(result.format == .csv)
+            case .json:
+                let result = try await exportManager.exportToJSON(session: testSession)
+                #expect(result.format == .json)
+            }
+        }
     }
     
+    @Test("Export handles invalid coordinate data gracefully")
     func testExportWithCorruptedData() async throws {
         // Create session with invalid coordinate data
         let corruptedSession = RuckSession()
@@ -288,12 +309,12 @@ final class ExportManagerTests: XCTestCase {
         
         // Export should still work (data validation is separate concern)
         let result = try await exportManager.exportToGPX(session: corruptedSession)
-        XCTAssertGreaterThan(result.fileSize, 0)
+        #expect(result.fileSize > 0)
     }
     
     // MARK: - Helper Methods
     
-    private func createTestSession() throws -> RuckSession {
+    static func createTestSession() throws -> RuckSession {
         let session = try RuckSession(loadWeight: 35.0)
         session.endDate = Date()
         session.totalDistance = 5000.0
@@ -318,7 +339,7 @@ final class ExportManagerTests: XCTestCase {
         return session
     }
     
-    private func createLargeTestSession(pointCount: Int) throws -> RuckSession {
+    static func createLargeTestSession(pointCount: Int) throws -> RuckSession {
         let session = try RuckSession(loadWeight: 35.0)
         session.endDate = Date()
         session.totalDistance = Double(pointCount) * 10.0 // 10m between points
@@ -341,7 +362,7 @@ final class ExportManagerTests: XCTestCase {
         return session
     }
     
-    private func cleanupTestFiles() async throws {
+    static func cleanupTestFiles(exportManager: ExportManager) async throws {
         let tempDir = FileManager.default.temporaryDirectory
         let testFiles = try FileManager.default.contentsOfDirectory(
             at: tempDir,

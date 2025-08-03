@@ -209,6 +209,16 @@ class DataCoordinator: ObservableObject {
             let result = try await exportManager.exportToJSON(sessionData: sessionData)
             let filename = "RuckSession_\(sessionData.startDate.formatted(.iso8601))_\(sessionData.id.uuidString.prefix(8)).json"
             return try await exportManager.saveExportPermanently(temporaryURL: result.url, filename: filename)
+        case .pdf:
+            guard let session = try container.mainContext.fetch(
+                FetchDescriptor<RuckSession>(
+                    predicate: #Predicate { $0.id == sessionId }
+                )
+            ).first else {
+                throw ExportManager.ExportError.sessionNotFound
+            }
+            
+            return try await exportManager.exportAsPDF(session: session)
         }
     }
     
