@@ -164,7 +164,7 @@ final class WeatherService {
     private(set) var weatherUpdateStatus: String = "Initializing..."
     
     // MARK: - Private Properties
-    private let weatherKitService = WeatherService.shared
+    private let weatherKitService = WeatherKit.WeatherService.shared
     private var weatherCache: [String: WeatherCacheEntry] = [:]
     private var configuration: WeatherUpdateConfiguration
     private var weatherUpdateTask: Task<Void, Never>?

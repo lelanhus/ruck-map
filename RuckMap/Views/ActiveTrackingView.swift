@@ -406,6 +406,24 @@ struct ActiveTrackingView: View {
             }
         }
     }
+    
+    // MARK: - Helper Functions
+    
+    private func weatherAlertIcon(_ severity: WeatherAlertSeverity) -> String {
+        switch severity {
+        case .info: return "info.circle"
+        case .warning: return "exclamationmark.triangle"
+        case .critical: return "exclamationmark.octagon"
+        }
+    }
+    
+    private func weatherAlertColor(_ severity: WeatherAlertSeverity) -> Color {
+        switch severity {
+        case .info: return .blue
+        case .warning: return .orange
+        case .critical: return .red
+        }
+    }
 }
 
 struct MetricCard: View {
@@ -515,25 +533,6 @@ struct CalorieMetricCard: View {
         .cornerRadius(15)
         .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
     }
-    
-    // MARK: - Helper Functions
-    
-    private func weatherAlertIcon(_ severity: WeatherAlertSeverity) -> String {
-        switch severity {
-        case .info: return "info.circle"
-        case .warning: return "exclamationmark.triangle"
-        case .critical: return "exclamationmark.octagon"
-        }
-    }
-    
-    private func weatherAlertColor(_ severity: WeatherAlertSeverity) -> Color {
-        switch severity {
-        case .info: return .blue
-        case .warning: return .orange
-        case .critical: return .red
-        }
-    }
-}
 
 // MARK: - Weather Card Component
 
