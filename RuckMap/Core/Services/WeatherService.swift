@@ -478,13 +478,53 @@ final class WeatherService {
     @MainActor
     private func fetchAndConvertWeather(for location: CLLocation, weatherLocation: WeatherLocation) async throws -> WeatherConditions {
         do {
-            // Fetch and immediately convert to avoid Weather sendability issues
-            let weather = try await weatherKitService.weather(for: location)
-            return convertToWeatherConditions(weather, location: weatherLocation)
+            // Create weather conditions from fetched data
+            let weatherData = try await fetchWeatherData(for: location)
+            
+            let conditions = WeatherConditions(
+                timestamp: Date(),
+                temperature: weatherData.temperature,
+                humidity: weatherData.humidity,
+                windSpeed: weatherData.windSpeed,
+                windDirection: weatherData.windDirection,
+                precipitation: weatherData.precipitation,
+                pressure: weatherData.pressure
+            )
+            
+            conditions.weatherDescription = weatherData.description
+            conditions.conditionCode = weatherData.conditionCode
+            
+            return conditions
         } catch {
             print("WeatherKit API error: \(error)")
             throw error
         }
+    }
+    
+    // Nonisolated function to fetch weather data
+    private nonisolated func fetchWeatherData(for location: CLLocation) async throws -> (
+        temperature: Double,
+        humidity: Double,
+        windSpeed: Double,
+        windDirection: Double,
+        precipitation: Double,
+        pressure: Double,
+        description: String?,
+        conditionCode: String?
+    ) {
+        let weather = try await WeatherKit.WeatherService.shared.weather(for: location)
+        let currentWeather = weather.currentWeather
+        
+        return (
+            temperature: currentWeather.temperature.value,
+            humidity: currentWeather.humidity * 100,
+            windSpeed: currentWeather.wind.speed.value,
+            windDirection: currentWeather.wind.direction.value,
+            precipitation: 0, // CurrentWeather doesn't have precipitation
+            pressure: currentWeather.pressure.value,
+            description: currentWeather.condition.description,
+            conditionCode: String(currentWeather.condition.rawValue)
+        )
     }
     
     private func convertToWeatherConditions(_ weather: Weather, location: WeatherLocation) -> WeatherConditions {

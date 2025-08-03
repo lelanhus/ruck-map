@@ -193,6 +193,7 @@ struct WeatherKitDevelopmentHelper {
     }
     
     /// Validates WeatherKit setup and prints results to console
+    @MainActor
     static func validateAndPrintSetup() {
         let result = WeatherKitSetupValidator.validateWeatherKitSetup()
         
