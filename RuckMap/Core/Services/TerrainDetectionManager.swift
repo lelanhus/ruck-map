@@ -79,7 +79,9 @@ final class TerrainDetectionManager {
     }
     
     deinit {
-        stopDetection()
+        Task { @MainActor in
+            stopDetection()
+        }
     }
     
     private func setupMotionManager() {

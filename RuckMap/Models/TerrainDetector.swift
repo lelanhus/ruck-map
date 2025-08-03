@@ -140,7 +140,9 @@ final class TerrainDetector {
     }
     
     deinit {
-        stopDetection()
+        Task { @MainActor in
+            stopDetection()
+        }
     }
     
     // MARK: - Public Interface
@@ -183,7 +185,8 @@ final class TerrainDetector {
             terrainType: terrain,
             confidence: 1.0,
             timestamp: Date(),
-            detectionMethod: .manual
+            detectionMethod: .manual,
+            isManualOverride: true
         )
         
         addToHistory(result)
@@ -196,7 +199,8 @@ final class TerrainDetector {
                 terrainType: currentTerrain,
                 confidence: 0.0,
                 timestamp: Date(),
-                detectionMethod: .motion
+                detectionMethod: .motion,
+                isManualOverride: false
             )
         }
         
@@ -285,7 +289,8 @@ final class TerrainDetector {
             terrainType: .trail,
             confidence: 0.3,
             timestamp: Date(),
-            detectionMethod: .fusion
+            detectionMethod: .fusion,
+            isManualOverride: false
         )
         
         if confidence < 0.3 {
@@ -497,7 +502,8 @@ final class TerrainDetector {
             terrainType: finalTerrain,
             confidence: finalConfidence,
             timestamp: Date(),
-            detectionMethod: detectionMethod
+            detectionMethod: detectionMethod,
+            isManualOverride: false
         )
     }
     

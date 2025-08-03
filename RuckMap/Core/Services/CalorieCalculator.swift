@@ -203,9 +203,7 @@ final class CalorieCalculator {
     }
     
     deinit {
-        Task { @MainActor in
-            calculationTask?.cancel()
-        }
+        calculationTask?.cancel()
     }
     
     // MARK: - Public Interface

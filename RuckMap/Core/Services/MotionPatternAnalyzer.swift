@@ -162,24 +162,6 @@ actor MotionPatternAnalyzer {
         )
     ]
     
-    // MARK: - Analysis Result
-    
-    struct MotionAnalysisResult: Sendable {
-        let terrainType: TerrainType
-        let confidence: Double
-        let timestamp: Date
-        let analysisDetails: AnalysisDetails
-        
-        struct AnalysisDetails: Sendable {
-            let stepFrequency: Double
-            let accelerationVariance: Double
-            let verticalComponent: Double
-            let stepRegularity: Double
-            let frequencyProfile: [Double]
-            let gyroscopeVariance: Double
-            let impactIntensity: Double
-        }
-    }
     
     // MARK: - State Management
     
@@ -563,16 +545,6 @@ extension MotionPatternAnalyzer {
         return await performAnalysis()
     }
     
-    /// Gets the current number of samples
-    var sampleCount: Int {
-        motionSamples.count
-    }
-    
-    /// Gets the time since last analysis
-    var timeSinceLastAnalysis: TimeInterval? {
-        guard let lastAnalysis = cachedAnalysis?.timestamp else { return nil }
-        return Date().timeIntervalSince(lastAnalysis)
-    }
     
     /// Resets the analyzer state
     func reset() async {

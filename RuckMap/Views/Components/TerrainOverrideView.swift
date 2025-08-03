@@ -111,17 +111,17 @@ struct TerrainOverrideView: View {
                 remainingTime: overrideState.remainingTimeFormatted
             )
             .onLongPressGesture(minimumDuration: 0.6) {
-                triggerHapticFeedback(.selection)
+                triggerHapticFeedback(.light)
                 withAnimation(.easeInOut(duration: 0.3)) {
                     overrideState.showQuickPicker.toggle()
                 }
             }
             .onTapGesture {
                 if overrideState.isOverrideActive {
-                    triggerHapticFeedback(.warning)
+                    triggerHapticFeedback(.medium)
                     showOverrideClearConfirmation()
                 } else {
-                    triggerHapticFeedback(.selection)
+                    triggerHapticFeedback(.light)
                     withAnimation(.easeInOut(duration: 0.3)) {
                         overrideState.showQuickPicker.toggle()
                     }
@@ -204,7 +204,7 @@ struct TerrainOverrideView: View {
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         alert.addAction(UIAlertAction(title: "Clear", style: .destructive) { _ in
             self.overrideState.clearOverride()
-            self.triggerHapticFeedback(.success)
+            self.triggerHapticFeedback(.heavy)
         })
         
         if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
@@ -762,17 +762,17 @@ struct TerrainOverrideCompatView: View {
                 remainingTime: overrideState.remainingTimeFormatted
             )
             .onLongPressGesture(minimumDuration: 0.6) {
-                triggerHapticFeedback(.selection)
+                triggerHapticFeedback(.light)
                 withAnimation(.easeInOut(duration: 0.3)) {
                     overrideState.showQuickPicker.toggle()
                 }
             }
             .onTapGesture {
                 if overrideState.isOverrideActive {
-                    triggerHapticFeedback(.warning)
+                    triggerHapticFeedback(.medium)
                     showOverrideClearConfirmation()
                 } else {
-                    triggerHapticFeedback(.selection)
+                    triggerHapticFeedback(.light)
                     withAnimation(.easeInOut(duration: 0.3)) {
                         overrideState.showQuickPicker.toggle()
                     }
@@ -854,7 +854,7 @@ struct TerrainOverrideCompatView: View {
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         alert.addAction(UIAlertAction(title: "Clear", style: .destructive) { _ in
             self.overrideState.clearOverride()
-            self.triggerHapticFeedback(.success)
+            self.triggerHapticFeedback(.heavy)
         })
         
         if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
