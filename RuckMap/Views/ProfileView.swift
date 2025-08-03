@@ -1,6 +1,37 @@
 import SwiftUI
 import SwiftData
 
+/// Temporary FormatUtilities - should be moved to separate file when project structure is fixed
+private enum FormatUtilities {
+    enum ConversionConstants {
+        static let poundsToKilograms = 0.453592
+        static let kilogramsToPounds = 2.20462
+        static let metersToMiles = 1609.34
+        static let metersToKilometers = 1000.0
+    }
+    
+    static func formatDistance(_ meters: Double, units: String = "imperial") -> String {
+        if units == "imperial" {
+            let miles = meters / ConversionConstants.metersToMiles
+            return String(format: "%.1f mi", miles)
+        } else {
+            let kilometers = meters / ConversionConstants.metersToKilometers
+            return String(format: "%.1f km", kilometers)
+        }
+    }
+    
+    static func formatTotalDuration(_ seconds: TimeInterval) -> String {
+        let hours = Int(seconds) / 3600
+        return "\(hours)h"
+    }
+    
+    static func formatMemberSince(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM yyyy"
+        return formatter.string(from: date)
+    }
+}
+
 /// Profile view displaying user statistics, achievements, and app settings
 /// Provides comprehensive user data overview and customization options
 struct ProfileView: View {
@@ -109,7 +140,7 @@ struct ProfileView: View {
         ], spacing: 16) {
             ProfileStatCard(
                 title: "Total Distance",
-                value: formatDistance(profileStats.totalDistance),
+                value: FormatUtilities.formatDistance(profileStats.totalDistance, units: preferredUnits),
                 subtitle: "All time",
                 icon: "map.circle.fill",
                 color: .blue
@@ -117,7 +148,7 @@ struct ProfileView: View {
             
             ProfileStatCard(
                 title: "Total Time",
-                value: formatTotalDuration(profileStats.totalDuration),
+                value: FormatUtilities.formatTotalDuration(profileStats.totalDuration),
                 subtitle: "Moving time",
                 icon: "clock.circle.fill",
                 color: .green
@@ -133,7 +164,7 @@ struct ProfileView: View {
             
             ProfileStatCard(
                 title: "Avg Distance",
-                value: formatDistance(profileStats.averageDistance),
+                value: FormatUtilities.formatDistance(profileStats.averageDistance, units: preferredUnits),
                 subtitle: "Per session",
                 icon: "chart.line.uptrend.xyaxis.circle.fill",
                 color: .purple
@@ -177,21 +208,21 @@ struct ProfileView: View {
             VStack(spacing: 8) {
                 PerformanceRow(
                     title: "This Week",
-                    distance: formatDistance(profileStats.thisWeekDistance),
+                    distance: FormatUtilities.formatDistance(profileStats.thisWeekDistance, units: preferredUnits),
                     sessions: profileStats.thisWeekSessions,
                     icon: "calendar.day.timeline.left"
                 )
                 
                 PerformanceRow(
                     title: "This Month",
-                    distance: formatDistance(profileStats.thisMonthDistance),
+                    distance: FormatUtilities.formatDistance(profileStats.thisMonthDistance, units: preferredUnits),
                     sessions: profileStats.thisMonthSessions,
                     icon: "calendar"
                 )
                 
                 PerformanceRow(
                     title: "Personal Best",
-                    distance: formatDistance(profileStats.longestDistance),
+                    distance: FormatUtilities.formatDistance(profileStats.longestDistance, units: preferredUnits),
                     sessions: 1,
                     icon: "star.circle.fill"
                 )
@@ -260,7 +291,7 @@ struct ProfileView: View {
         var achievements: [Achievement] = []
         
         // Distance milestones
-        let totalMiles = profileStats.totalDistance / 1609.34
+        let totalMiles = profileStats.totalDistance / FormatUtilities.ConversionConstants.metersToMiles
         if totalMiles >= 1000 {
             achievements.append(Achievement(
                 id: "1000miles",
@@ -328,20 +359,6 @@ struct ProfileView: View {
     
     // MARK: - Helper Methods
     
-    private func formatDistance(_ meters: Double) -> String {
-        if preferredUnits == "imperial" {
-            let miles = meters / 1609.34
-            return String(format: "%.1f mi", miles)
-        } else {
-            let kilometers = meters / 1000
-            return String(format: "%.1f km", kilometers)
-        }
-    }
-    
-    private func formatTotalDuration(_ seconds: TimeInterval) -> String {
-        let hours = Int(seconds) / 3600
-        return "\(hours)h"
-    }
 }
 
 // MARK: - Supporting Types and Views

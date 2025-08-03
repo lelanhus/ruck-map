@@ -1,6 +1,66 @@
 import SwiftUI
 import SwiftData
 
+/// Temporary FormatUtilities - should be moved to separate file when project structure is fixed
+private enum FormatUtilities {
+    enum ConversionConstants {
+        static let poundsToKilograms = 0.453592
+        static let kilogramsToPounds = 2.20462
+        static let metersToMiles = 1609.34
+        static let metersToKilometers = 1000.0
+    }
+    
+    static func formatDistance(_ meters: Double, units: String = "imperial") -> String {
+        if units == "imperial" {
+            let miles = meters / ConversionConstants.metersToMiles
+            return String(format: "%.1f mi", miles)
+        } else {
+            let kilometers = meters / ConversionConstants.metersToKilometers
+            return String(format: "%.1f km", kilometers)
+        }
+    }
+    
+    static func formatDistancePrecise(_ meters: Double, units: String = "imperial") -> String {
+        if units == "imperial" {
+            let miles = meters / ConversionConstants.metersToMiles
+            return String(format: "%.2f mi", miles)
+        } else {
+            let kilometers = meters / ConversionConstants.metersToKilometers
+            return String(format: "%.2f km", kilometers)
+        }
+    }
+    
+    static func formatDuration(_ seconds: TimeInterval) -> String {
+        let hours = Int(seconds) / 3600
+        let minutes = Int(seconds) % 3600 / 60
+        
+        if hours > 0 {
+            return String(format: "%d:%02d", hours, minutes)
+        } else {
+            return String(format: "%d min", minutes)
+        }
+    }
+    
+    static func poundsToKilograms(_ pounds: Double) -> Double {
+        pounds * ConversionConstants.poundsToKilograms
+    }
+    
+    static func formatWeight(_ kilograms: Double, units: String = "imperial") -> String {
+        if units == "imperial" {
+            let pounds = kilograms * ConversionConstants.kilogramsToPounds
+            return String(format: "%.0f lbs", pounds)
+        } else {
+            return String(format: "%.0f kg", kilograms)
+        }
+    }
+    
+    static func formatSessionDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter.string(from: date)
+    }
+}
+
 /// Home screen providing quick ruck start functionality and session overview
 /// Handles both inactive state and active tracking transitions
 struct HomeView: View {
@@ -100,7 +160,7 @@ struct HomeView: View {
             
             StatCard(
                 title: "Total Distance",
-                value: formatDistance(totalDistance),
+                value: FormatUtilities.formatDistance(totalDistance, units: preferredUnits),
                 icon: "map.circle.fill",
                 color: .green
             )
@@ -177,7 +237,7 @@ struct HomeView: View {
                 Spacer()
                 
                 Button("View All") {
-                    // This would switch to history tab in full implementation
+                    // TODO: Implement navigation to history tab
                 }
                 .font(.subheadline)
                 .foregroundColor(.armyGreenPrimary)
@@ -200,26 +260,16 @@ struct HomeView: View {
         }
     }
     
-    private func formatDistance(_ meters: Double) -> String {
-        if preferredUnits == "imperial" {
-            let miles = meters / 1609.34
-            return String(format: "%.1f mi", miles)
-        } else {
-            let kilometers = meters / 1000
-            return String(format: "%.1f km", kilometers)
-        }
-    }
-    
     private func startQuickRuck() {
         let session = RuckSession()
-        session.loadWeight = currentWeight * 0.453592 // Convert lbs to kg
+        session.loadWeight = FormatUtilities.poundsToKilograms(currentWeight)
         modelContext.insert(session)
         
         do {
             try modelContext.save()
             locationManager.startTracking(with: session)
         } catch {
-            errorMessage = "Failed to save session: \(error.localizedDescription)"
+            errorMessage = "Unable to start your ruck session. Please check your device storage and try again. If the problem persists, restart the app."
             showingErrorAlert = true
         }
     }
@@ -263,30 +313,15 @@ struct RecentSessionRow: View {
     @AppStorage("preferredUnits") private var preferredUnits = "imperial"
     
     private var formattedDistance: String {
-        if preferredUnits == "imperial" {
-            let miles = session.totalDistance / 1609.34
-            return String(format: "%.2f mi", miles)
-        } else {
-            let kilometers = session.totalDistance / 1000
-            return String(format: "%.2f km", kilometers)
-        }
+        FormatUtilities.formatDistancePrecise(session.totalDistance, units: preferredUnits)
     }
     
     private var formattedDuration: String {
-        let hours = Int(session.totalDuration) / 3600
-        let minutes = Int(session.totalDuration) % 3600 / 60
-        
-        if hours > 0 {
-            return String(format: "%d:%02d", hours, minutes)
-        } else {
-            return String(format: "%d min", minutes)
-        }
+        FormatUtilities.formatDuration(session.totalDuration)
     }
     
     private var formattedDate: String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        return formatter.string(from: session.startDate)
+        FormatUtilities.formatSessionDate(session.startDate)
     }
     
     var body: some View {
@@ -315,7 +350,7 @@ struct RecentSessionRow: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
-                    Label("\(Int(session.loadWeight * 2.20462)) lbs", systemImage: "backpack")
+                    Label(FormatUtilities.formatWeight(session.loadWeight, units: preferredUnits), systemImage: "backpack")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }

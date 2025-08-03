@@ -4,6 +4,7 @@ import SwiftUI
 /// Centralized navigation state management for RuckMap
 /// Provides type-safe navigation and tab coordination following iOS 18+ patterns
 @Observable
+@MainActor
 final class AppNavigation {
     // MARK: - Tab Navigation State
 
@@ -134,7 +135,7 @@ final class AppNavigation {
         switch host {
         case "session":
             if let sessionId = components.queryItems?.first(where: { $0.name == "id" })?.value,
-               let uuid = UUID(uuidString: sessionId)
+               let _ = UUID(uuidString: sessionId)
             {
                 // In a real app, you'd fetch the session by ID
                 // For now, we'll just navigate to history
@@ -178,7 +179,7 @@ final class AppNavigation {
 
 /// Environment key for AppNavigation
 struct AppNavigationKey: EnvironmentKey {
-    static let defaultValue = AppNavigation()
+    nonisolated(unsafe) static let defaultValue = AppNavigation()
 }
 
 extension EnvironmentValues {
@@ -210,6 +211,7 @@ final class NavigationPreferences {
         case always = "Always"
         case never = "Never"
 
+        @MainActor
         var systemStyle: UITabBarAppearance {
             let appearance = UITabBarAppearance()
             switch self {

@@ -1,6 +1,67 @@
 import SwiftUI
 import SwiftData
 
+/// Temporary FormatUtilities - should be moved to separate file when project structure is fixed
+private enum FormatUtilities {
+    enum ConversionConstants {
+        static let poundsToKilograms = 0.453592
+        static let kilogramsToPounds = 2.20462
+        static let metersToMiles = 1609.34
+        static let metersToKilometers = 1000.0
+    }
+    
+    static func formatDistance(_ meters: Double, units: String = "imperial") -> String {
+        if units == "imperial" {
+            let miles = meters / ConversionConstants.metersToMiles
+            return String(format: "%.1f mi", miles)
+        } else {
+            let kilometers = meters / ConversionConstants.metersToKilometers
+            return String(format: "%.1f km", kilometers)
+        }
+    }
+    
+    static func formatDistancePrecise(_ meters: Double, units: String = "imperial") -> String {
+        if units == "imperial" {
+            let miles = meters / ConversionConstants.metersToMiles
+            return String(format: "%.2f mi", miles)
+        } else {
+            let kilometers = meters / ConversionConstants.metersToKilometers
+            return String(format: "%.2f km", kilometers)
+        }
+    }
+    
+    static func formatDuration(_ seconds: TimeInterval) -> String {
+        let hours = Int(seconds) / 3600
+        let minutes = Int(seconds) % 3600 / 60
+        
+        if hours > 0 {
+            return String(format: "%d:%02d", hours, minutes)
+        } else {
+            return String(format: "%d min", minutes)
+        }
+    }
+    
+    static func formatTotalDuration(_ seconds: TimeInterval) -> String {
+        let hours = Int(seconds) / 3600
+        return "\(hours)h"
+    }
+    
+    static func formatWeight(_ kilograms: Double, units: String = "imperial") -> String {
+        if units == "imperial" {
+            let pounds = kilograms * ConversionConstants.kilogramsToPounds
+            return String(format: "%.0f lbs", pounds)
+        } else {
+            return String(format: "%.0f kg", kilograms)
+        }
+    }
+    
+    static func formatSessionDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter.string(from: date)
+    }
+}
+
 /// History view displaying past ruck sessions with filtering and sorting options
 /// Provides detailed session management and statistics
 struct HistoryView: View {
@@ -155,14 +216,14 @@ struct HistoryView: View {
             
             StatisticItem(
                 title: "Distance",
-                value: formatDistance(historyStats.totalDistance),
+                value: FormatUtilities.formatDistance(historyStats.totalDistance, units: preferredUnits),
                 icon: "map.circle",
                 color: .green
             )
             
             StatisticItem(
                 title: "Time",
-                value: formatTotalDuration(historyStats.totalDuration),
+                value: FormatUtilities.formatTotalDuration(historyStats.totalDuration),
                 icon: "clock.circle",
                 color: .orange
             )
@@ -233,20 +294,6 @@ struct HistoryView: View {
     
     // MARK: - Helper Methods
     
-    private func formatDistance(_ meters: Double) -> String {
-        if preferredUnits == "imperial" {
-            let miles = meters / 1609.34
-            return String(format: "%.1f mi", miles)
-        } else {
-            let kilometers = meters / 1000
-            return String(format: "%.1f km", kilometers)
-        }
-    }
-    
-    private func formatTotalDuration(_ seconds: TimeInterval) -> String {
-        let hours = Int(seconds) / 3600
-        return "\(hours)h"
-    }
     
     private func sessionAccessibilityLabel(for session: RuckSession) -> String {
         let distance = formatDistance(session.totalDistance)
@@ -267,7 +314,7 @@ struct HistoryView: View {
             do {
                 try modelContext.save()
             } catch {
-                errorMessage = "Failed to delete sessions: \(error.localizedDescription)"
+                errorMessage = "Unable to delete the selected sessions. Please check your device storage and try again. If the problem persists, restart the app."
                 showingErrorAlert = true
             }
         }
@@ -335,35 +382,19 @@ struct SessionListRow: View {
     @AppStorage("preferredUnits") private var preferredUnits = "imperial"
     
     private var formattedDistance: String {
-        if preferredUnits == "imperial" {
-            let miles = session.totalDistance / 1609.34
-            return String(format: "%.2f mi", miles)
-        } else {
-            let kilometers = session.totalDistance / 1000
-            return String(format: "%.2f km", kilometers)
-        }
+        FormatUtilities.formatDistancePrecise(session.totalDistance, units: preferredUnits)
     }
     
     private var formattedDuration: String {
-        let hours = Int(session.totalDuration) / 3600
-        let minutes = Int(session.totalDuration) % 3600 / 60
-        
-        if hours > 0 {
-            return String(format: "%d:%02d", hours, minutes)
-        } else {
-            return String(format: "%d min", minutes)
-        }
+        FormatUtilities.formatDuration(session.totalDuration)
     }
     
     private var formattedDate: String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        return formatter.string(from: session.startDate)
+        FormatUtilities.formatSessionDate(session.startDate)
     }
     
     private var loadWeight: String {
-        let pounds = session.loadWeight * 2.20462
-        return String(format: "%.0f lbs", pounds)
+        FormatUtilities.formatWeight(session.loadWeight, units: preferredUnits)
     }
     
     var body: some View {
