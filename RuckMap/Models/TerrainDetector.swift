@@ -204,7 +204,7 @@ final class TerrainDetector {
             )
         }
         
-        let motionResult = await analyzeMotionPattern()
+        let motionResult = await analyzeMotionPatternLocal()
         let locationResult = analyzeLocationContext()
         let mapKitResult = await analyzeMapKitData()
         let fusedResult = fuseDetectionResults(
@@ -398,7 +398,7 @@ final class TerrainDetector {
         }
     }
     
-    private func analyzeMotionPattern() async -> (terrain: TerrainType, confidence: Double) {
+    private func analyzeMotionPatternLocal() async -> (terrain: TerrainType, confidence: Double) {
         // Use the advanced motion pattern analyzer
         guard let analysisResult = await motionAnalyzer.analyzeMotionPattern() else {
             return (.trail, 0.0)

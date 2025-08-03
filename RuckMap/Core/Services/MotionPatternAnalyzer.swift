@@ -540,10 +540,6 @@ extension MotionPatternAnalyzer {
         }
     }
     
-    /// Analyzes the current motion pattern and returns terrain classification
-    func analyzeMotionPattern() async -> MotionAnalysisResult? {
-        return await performAnalysis()
-    }
     
     
     /// Resets the analyzer state

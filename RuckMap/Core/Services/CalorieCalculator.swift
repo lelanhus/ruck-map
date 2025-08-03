@@ -172,7 +172,7 @@ final class CalorieCalculator {
     private var calculationHistory: [CalorieCalculationResult] = []
     private let maxHistorySize: Int = 1000
     private var lastCalculationTime: Date?
-    private var calculationTask: Task<Void, Never>?
+    nonisolated private var calculationTask: Task<Void, Never>?
     
     // MARK: - LCDA Algorithm Constants
     private struct LCDAConstants {

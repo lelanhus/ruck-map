@@ -131,8 +131,8 @@ final class TerrainDetectionManager {
             let result = TerrainDetectionResult(
                 terrainType: terrain,
                 confidence: 1.0,
-                detectionMethod: .manualOverride,
                 timestamp: Date(),
+                detectionMethod: .manualOverride,
                 isManualOverride: true
             )
             
@@ -158,8 +158,8 @@ final class TerrainDetectionManager {
             return TerrainDetectionResult(
                 terrainType: override,
                 confidence: 1.0,
-                detectionMethod: .manualOverride,
                 timestamp: Date(),
+                detectionMethod: .manualOverride,
                 isManualOverride: true
             )
         }
@@ -171,8 +171,8 @@ final class TerrainDetectionManager {
             return TerrainDetectionResult(
                 terrainType: defaultTerrain,
                 confidence: 0.3,
-                detectionMethod: .fusion,
                 timestamp: Date(),
+                detectionMethod: .fusion,
                 isManualOverride: false
             )
         }
@@ -310,7 +310,7 @@ final class TerrainDetectionManager {
         // Check for nearby map features
         let point = mapView.convert(location.coordinate, toPointTo: mapView)
         let rect = CGRect(x: point.x - 25, y: point.y - 25, width: 50, height: 50)
-        let region = mapView.convert(rect, toCoordinateFrom: mapView)
+        let region = mapView.convert(CGPoint(x: rect.midX, y: rect.midY), toCoordinateFrom: mapView)
         
         // This is a simplified analysis - could be enhanced with actual map overlay checking
         // For now, use coordinate-based heuristics
@@ -340,21 +340,21 @@ final class TerrainDetectionManager {
             
             // Combine results if both have reasonable confidence
             if result.confidence > 0.5 && mapViewResult.confidence > 0.5 {
-                if result.terrain == mapViewResult.terrain {
+                if result.terrainType == mapViewResult.terrainType {
                     // Agreement - boost confidence
-                    return (result.terrain, min(1.0, (result.confidence + mapViewResult.confidence) / 2.0 + 0.1))
+                    return (terrainType: result.terrainType, confidence: min(1.0, (result.confidence + mapViewResult.confidence) / 2.0 + 0.1))
                 } else {
                     // Disagreement - favor the dedicated analyzer
-                    return (result.terrain, result.confidence * 0.9)
+                    return (terrainType: result.terrainType, confidence: result.confidence * 0.9)
                 }
             } else if result.confidence > mapViewResult.confidence {
-                return result
+                return (terrainType: result.terrainType, confidence: result.confidence)
             } else {
-                return mapViewResult
+                return (terrainType: mapViewResult.terrainType, confidence: mapViewResult.confidence)
             }
         }
         
-        return result
+        return (terrainType: result.terrainType, confidence: result.confidence)
     }
     
     private func analyzeCoordinateContext(coordinate: CLLocationCoordinate2D) -> (terrainType: TerrainType, confidence: Double) {
@@ -575,8 +575,8 @@ final class TerrainDetectionManager {
         return TerrainDetectionResult(
             terrainType: finalTerrain,
             confidence: finalConfidence,
-            detectionMethod: detectionMethod,
             timestamp: Date(),
+            detectionMethod: detectionMethod,
             isManualOverride: false
         )
     }
@@ -749,8 +749,8 @@ extension TerrainDetectionManager {
             let fallbackResult = TerrainDetectionResult(
                 terrainType: .trail,
                 confidence: 0.3,
-                detectionMethod: .fusion,
                 timestamp: Date(),
+                detectionMethod: .fusion,
                 isManualOverride: false
             )
             
