@@ -49,8 +49,10 @@ struct TerrainDetectionResult: Sendable {
         case manualOverride
     }
     
+    private static let highConfidenceThreshold: Double = 0.85
+    
     var isHighConfidence: Bool {
-        confidence >= 0.85
+        confidence >= Self.highConfidenceThreshold
     }
     
     var terrainFactor: Double {
@@ -107,6 +109,20 @@ final class TerrainDetector {
         static let historyMaxSize: Int = 100
         static let motionAnalysisWindowSize: Int = 150 // ~5 seconds at 30Hz
         static let gyroSampleRate: TimeInterval = 1.0/30.0 // 30Hz for gyroscope
+        
+        // Confidence thresholds
+        static let highConfidenceThreshold: Double = 0.85
+        static let fallbackConfidence: Double = 0.3
+        static let manualOverrideConfidence: Double = 1.0
+        
+        // Motion analysis
+        static let minimumAccelerometerSamples: Int = 30
+        static let motionSyncTimeDiffThreshold: TimeInterval = 0.1
+        
+        // Terrain factor monitoring
+        static let terrainFactorChangeThreshold: Double = 0.1
+        static let terrainFactorUpdateInterval: TimeInterval = 5.0
+        static let terrainFactorCheckInterval: TimeInterval = 2.0
     }
     
     // MARK: - Motion Analysis Data
@@ -174,11 +190,11 @@ final class TerrainDetector {
     /// Manually override terrain type with high confidence
     func setManualTerrain(_ terrain: TerrainType) {
         currentTerrain = terrain
-        confidence = 1.0
+        confidence = DetectionConfig.manualOverrideConfidence
         
         let result = TerrainDetectionResult(
             terrainType: terrain,
-            confidence: 1.0,
+            confidence: DetectionConfig.manualOverrideConfidence,
             timestamp: Date(),
             detectionMethod: .manual,
             isManualOverride: true
@@ -189,7 +205,7 @@ final class TerrainDetector {
     
     /// Performs immediate terrain detection based on current data
     func detectCurrentTerrain() async -> TerrainDetectionResult {
-        guard accelerometerData.count >= 30 else {
+        guard accelerometerData.count >= DetectionConfig.minimumAccelerometerSamples else {
             return TerrainDetectionResult(
                 terrainType: currentTerrain,
                 confidence: 0.0,
@@ -245,8 +261,8 @@ final class TerrainDetector {
                 let confidence = self.confidence
                 
                 // Update if terrain factor changed significantly or enough time has passed
-                let factorChanged = abs(currentFactor - lastTerrainFactor) > 0.1
-                let timeElapsed = Date().timeIntervalSince(lastUpdateTime) > 5.0
+                let factorChanged = abs(currentFactor - lastTerrainFactor) > DetectionConfig.terrainFactorChangeThreshold
+                let timeElapsed = Date().timeIntervalSince(lastUpdateTime) > DetectionConfig.terrainFactorUpdateInterval
                 
                 if factorChanged || timeElapsed {
                     await factorUpdateHandler(currentFactor, currentType, confidence)
@@ -255,7 +271,7 @@ final class TerrainDetector {
                 }
                 
                 // Check every 2 seconds for terrain factor changes
-                try? await Task.sleep(for: .seconds(2))
+                try? await Task.sleep(for: .seconds(DetectionConfig.terrainFactorCheckInterval))
             }
         }
     }
@@ -282,15 +298,15 @@ final class TerrainDetector {
         // Fallback to default terrain with reduced confidence
         let fallbackResult = TerrainDetectionResult(
             terrainType: .trail,
-            confidence: 0.3,
+            confidence: DetectionConfig.fallbackConfidence,
             timestamp: Date(),
             detectionMethod: .fusion,
             isManualOverride: false
         )
         
-        if confidence < 0.3 {
+        if confidence < DetectionConfig.fallbackConfidence {
             currentTerrain = .trail
-            confidence = 0.3
+            confidence = DetectionConfig.fallbackConfidence
             addToHistory(fallbackResult)
         }
     }
@@ -385,7 +401,7 @@ final class TerrainDetector {
               let latestGyro = gyroscopeData.last else { return }
         
         let timeDiff = abs(latestAccel.timestamp - latestGyro.timestamp)
-        guard timeDiff < 0.1 else { return } // Samples must be synchronized
+        guard timeDiff < DetectionConfig.motionSyncTimeDiffThreshold else { return } // Samples must be synchronized
         
         // Send synchronized data to motion analyzer
         Task {
@@ -407,7 +423,7 @@ final class TerrainDetector {
     // MARK: - Location Context Analysis
     
     private func analyzeLocationContext() -> (terrain: TerrainType, confidence: Double) {
-        guard let location = locationManager?.location else {
+        guard locationManager?.location != nil else {
             return (.trail, 0.0)
         }
         

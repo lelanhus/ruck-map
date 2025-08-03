@@ -179,7 +179,7 @@ actor MotionPatternAnalyzer {
     /// - Parameters:
     ///   - accelerometer: Accelerometer data
     ///   - gyroscope: Gyroscope data
-    func addMotionSample(accelerometer: CMAccelerometerData, gyroscope: CMGyroData) {
+    func addMotionSample(accelerometer: CMAccelerometerData, gyroscope: CMGyroData) async {
         let sample = MotionSample(accelerometer: accelerometer, gyroscope: gyroscope)
         
         motionSamples.append(sample)
@@ -527,18 +527,6 @@ extension MotionPatternAnalyzer {
     }
     
     // MARK: - Public Interface
-    
-    /// Adds a motion sample for analysis
-    func addMotionSample(accelerometer: CMAccelerometerData, gyroscope: CMGyroData) async {
-        let sample = MotionSample(accelerometer: accelerometer, gyroscope: gyroscope)
-        
-        motionSamples.append(sample)
-        
-        // Maintain sliding window
-        if motionSamples.count > AnalysisConfig.windowSize {
-            motionSamples.removeFirst()
-        }
-    }
     
     
     

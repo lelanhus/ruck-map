@@ -22,6 +22,25 @@ final class MapKitTerrainAnalyzer {
         static let geocodingCacheTimeout: TimeInterval = 300 // 5 minutes
         static let minimumLocationAccuracy: Double = 100.0 // meters
         static let requestTimeout: TimeInterval = 5.0 // seconds
+        
+        // Confidence levels
+        static let baseConfidence: Double = 0.6
+        static let lowConfidence: Double = 0.1
+        static let defaultTrailConfidence: Double = 0.2
+        static let fallbackConfidence: Double = 0.3
+        static let highAltitudeThreshold: Double = 3000.0 // meters
+        static let highAltitudeConfidence: Double = 0.4
+        static let seaLevelThreshold: Double = 10.0 // meters
+        
+        // Confidence modifiers
+        static let parkModifier: Double = 0.9
+        static let wildernessModifier: Double = 1.1
+        static let winterModifier: Double = 0.8
+        static let stairsModifier: Double = 0.7
+        static let urbanModifier: Double = 0.7
+        static let waterProximityModifier: Double = 0.6
+        static let oceanProximityModifier: Double = 0.5
+        static let defaultTrailModifier: Double = 0.6
     }
     
     // MARK: - Cached Results
@@ -53,7 +72,7 @@ final class MapKitTerrainAnalyzer {
         
         // Check location accuracy
         guard location.horizontalAccuracy <= Config.minimumLocationAccuracy else {
-            return (.trail, 0.1) // Low confidence for poor GPS
+            return (.trail, Config.lowConfidence) // Low confidence for poor GPS
         }
         
         // Check cache first
@@ -104,26 +123,25 @@ final class MapKitTerrainAnalyzer {
     private func analyzeGeocodingData(location: CLLocation) async -> (terrain: TerrainType, confidence: Double) {
         
         do {
-            // Use timeout to prevent hanging
-            let placemarks = try await withThrowingTaskGroup(of: [CLPlacemark].self) { group in
-                group.addTask { @Sendable in
-                    let geocoder = CLGeocoder()
-                    return try await geocoder.reverseGeocodeLocation(location)
-                }
-                
-                // Add timeout task
-                group.addTask { @Sendable in
-                    try await Task.sleep(for: .seconds(Config.requestTimeout))
-                    throw CancellationError()
-                }
-                
-                // Return first result (either placemarks or timeout)
-                for try await result in group {
-                    group.cancelAll()
-                    return result
-                }
-                
-                throw CancellationError()
+            // Use a task with timeout
+            let task = Task {
+                let geocoder = CLGeocoder()
+                return try await geocoder.reverseGeocodeLocation(location)
+            }
+            
+            // Create timeout task
+            let timeoutTask = Task {
+                try await Task.sleep(for: .seconds(Config.requestTimeout))
+                task.cancel()
+            }
+            
+            let placemarks: [CLPlacemark]
+            do {
+                placemarks = try await task.value
+                timeoutTask.cancel() // Cancel timeout if geocoding completes
+            } catch {
+                timeoutTask.cancel()
+                throw error
             }
             
             if let placemark = placemarks.first {
@@ -132,15 +150,16 @@ final class MapKitTerrainAnalyzer {
             
         } catch {
             // Geocoding failed - return low confidence
-            return (.trail, 0.2)
+            return (.trail, Config.defaultTrailConfidence)
         }
         
-        return (.trail, 0.1)
+        // No placemark found
+        return (.trail, Config.defaultTrailConfidence)
     }
     
     private func classifyFromPlacemark(_ placemark: CLPlacemark) -> (terrain: TerrainType, confidence: Double) {
         
-        let confidence: Double = 0.6
+        let confidence: Double = Config.baseConfidence
         
         // Analyze thoroughfare (streets/roads)
         if let thoroughfare = placemark.thoroughfare?.lowercased() {
@@ -155,7 +174,7 @@ final class MapKitTerrainAnalyzer {
             if thoroughfare.contains("trail") ||
                thoroughfare.contains("path") ||
                thoroughfare.contains("way") {
-                return (.trail, confidence * 0.9)
+                return (.trail, confidence * Config.parkModifier)
             }
         }
         
@@ -174,7 +193,7 @@ final class MapKitTerrainAnalyzer {
                 
                 if areaLower.contains("trail") ||
                    areaLower.contains("hiking") {
-                    return (.trail, confidence * 1.1)
+                    return (.trail, confidence * Config.wildernessModifier)
                 }
                 
                 // Beach/sand areas
@@ -188,7 +207,7 @@ final class MapKitTerrainAnalyzer {
                 if areaLower.contains("ski") ||
                    areaLower.contains("snow") ||
                    areaLower.contains("winter") {
-                    return (.snow, confidence * 0.8) // Seasonal
+                    return (.snow, confidence * Config.winterModifier) // Seasonal
                 }
                 
                 // Gravel/unpaved areas
@@ -210,7 +229,7 @@ final class MapKitTerrainAnalyzer {
                 if areaLower.contains("building") ||
                    areaLower.contains("stairs") ||
                    areaLower.contains("steps") {
-                    return (.stairs, confidence * 0.7)
+                    return (.stairs, confidence * Config.stairsModifier)
                 }
             }
         }
@@ -220,7 +239,7 @@ final class MapKitTerrainAnalyzer {
             // Urban areas likely have paved surfaces
             if locality.contains("city") ||
                locality.contains("town") {
-                return (.pavedRoad, confidence * 0.7)
+                return (.pavedRoad, confidence * Config.urbanModifier)
             }
         }
         
@@ -230,17 +249,17 @@ final class MapKitTerrainAnalyzer {
                inlandWater.contains("pond") ||
                inlandWater.contains("river") ||
                inlandWater.contains("stream") {
-                return (.mud, confidence * 0.6) // Near water = potentially muddy
+                return (.mud, confidence * Config.waterProximityModifier) // Near water = potentially muddy
             }
         }
         
         // Ocean proximity might indicate sand
         if placemark.ocean != nil {
-            return (.sand, confidence * 0.5)
+            return (.sand, confidence * Config.oceanProximityModifier)
         }
         
         // Default to trail for outdoor areas
-        return (.trail, confidence * 0.6)
+        return (.trail, confidence * Config.defaultTrailModifier)
     }
     
     // MARK: - Coordinate Heuristics
@@ -253,13 +272,13 @@ final class MapKitTerrainAnalyzer {
         // These could be enhanced with geographic databases or ML models
         
         // Elevation-based heuristics
-        if location.altitude > 3000 { // High altitude - more likely snow/rock
-            return (.trail, 0.4) // Conservative confidence
+        if location.altitude > Config.highAltitudeThreshold { // High altitude - more likely snow/rock
+            return (.trail, Config.highAltitudeConfidence) // Conservative confidence
         }
         
-        if location.altitude < 10 && location.altitude > -10 { // Sea level
+        if location.altitude < Config.seaLevelThreshold && location.altitude > -Config.seaLevelThreshold { // Sea level
             // Near sea level could indicate coastal areas
-            return (.sand, 0.3)
+            return (.sand, Config.fallbackConfidence)
         }
         
         // Latitude-based seasonal adjustments
