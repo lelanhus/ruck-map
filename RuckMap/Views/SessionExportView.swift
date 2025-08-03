@@ -196,6 +196,8 @@ struct ExportFormatPicker: View {
             return "Spreadsheet format for data analysis. Includes all metrics and location points with timestamps."
         case .json:
             return "Structured data format for developers and advanced analysis tools."
+        case .pdf:
+            return "Portable document format for sharing and printing. Includes summary, statistics, and route visualization."
         }
     }
 }

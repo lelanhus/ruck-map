@@ -140,4 +140,36 @@ enum FormatUtilities {
         formatter.dateStyle = .medium
         return formatter.string(from: date)
     }
+    
+    // MARK: - Other Formatting
+    
+    /// Formats calories for display
+    /// - Parameter calories: Calorie value
+    /// - Returns: Formatted calorie string
+    static func formatCalories(_ calories: Double) -> String {
+        return "\(Int(calories)) kcal"
+    }
+    
+    /// Formats elevation based on user's preferred units
+    /// - Parameters:
+    ///   - meters: Elevation in meters
+    ///   - units: Preferred units ("imperial" or "metric")
+    /// - Returns: Formatted elevation string
+    static func formatElevation(_ meters: Double, units: String = "imperial") -> String {
+        if units == "imperial" {
+            let feet = meters * 3.28084
+            return "\(Int(feet)) ft"
+        }
+        return "\(Int(meters)) m"
+    }
+    
+    /// Formats pace in minutes per mile/km
+    /// - Parameter pace: Pace in minutes per mile/km
+    /// - Returns: Formatted pace string (e.g., "9:30")
+    static func formatPace(_ pace: Double) -> String {
+        guard pace > 0 else { return "--:--" }
+        let minutes = Int(pace)
+        let seconds = Int((pace - Double(minutes)) * 60)
+        return String(format: "%d:%02d", minutes, seconds)
+    }
 }

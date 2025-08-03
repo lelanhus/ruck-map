@@ -588,6 +588,17 @@ actor ExportManager {
         return permanentURL
     }
     
+    /// Saves data directly to permanent storage
+    func saveExportPermanently(data: Data, filename: String) async throws -> URL {
+        let exportsDir = try getExportsDirectory()
+        let permanentURL = exportsDir.appendingPathComponent(filename)
+        
+        try data.write(to: permanentURL)
+        
+        logger.info("Saved export permanently to: \(permanentURL)")
+        return permanentURL
+    }
+    
     /// Cleans up old export files
     func cleanupOldExports(olderThan days: Int = 7) async throws {
         let exportsDir = try getExportsDirectory()

@@ -406,26 +406,41 @@ struct HistoryTabContent: View {
 
     private var statisticsHeader: some View {
         HStack(spacing: 16) {
-            StatisticItem(
-                title: "Sessions",
-                value: "\(filteredSessions.count)",
-                icon: "list.bullet.circle",
-                color: .blue
-            )
+            VStack(spacing: 4) {
+                Image(systemName: "list.bullet.circle")
+                    .font(.title2)
+                    .foregroundColor(.blue)
+                Text("\(filteredSessions.count)")
+                    .font(.headline)
+                Text("Sessions")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity)
 
-            StatisticItem(
-                title: "Distance",
-                value: FormatUtilities.formatDistance(filteredSessions.reduce(0) { $0 + $1.totalDistance }, units: preferredUnits),
-                icon: "map.circle",
-                color: .green
-            )
+            VStack(spacing: 4) {
+                Image(systemName: "map.circle")
+                    .font(.title2)
+                    .foregroundColor(.green)
+                Text(FormatUtilities.formatDistance(filteredSessions.reduce(0) { $0 + $1.totalDistance }, units: preferredUnits))
+                    .font(.headline)
+                Text("Distance")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity)
 
-            StatisticItem(
-                title: "Time",
-                value: FormatUtilities.formatTotalDuration(filteredSessions.reduce(0) { $0 + $1.totalDuration }),
-                icon: "clock.circle",
-                color: .orange
-            )
+            VStack(spacing: 4) {
+                Image(systemName: "clock.circle")
+                    .font(.title2)
+                    .foregroundColor(.orange)
+                Text(FormatUtilities.formatTotalDuration(filteredSessions.reduce(0) { $0 + $1.totalDuration }))
+                    .font(.headline)
+                Text("Time")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -452,7 +467,31 @@ struct HistoryTabContent: View {
         List {
             ForEach(filteredSessions, id: \.id) { session in
                 NavigationLink(destination: SessionDetailView(session: session)) {
-                    SessionListRow(session: session)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(session.startDate.formatted(date: .abbreviated, time: .shortened))
+                                .font(.headline)
+                            Spacer()
+                            if let rpe = session.rpe {
+                                Text("RPE: \(rpe)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        
+                        HStack {
+                            Label(FormatUtilities.formatDistance(session.totalDistance, units: preferredUnits), systemImage: "figure.walk")
+                                .font(.subheadline)
+                            
+                            Label(FormatUtilities.formatDuration(session.totalDuration), systemImage: "clock")
+                                .font(.subheadline)
+                            
+                            Label("\(Int(session.totalCalories)) kcal", systemImage: "flame")
+                                .font(.subheadline)
+                        }
+                        .foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 4)
                 }
             }
             .onDelete(perform: deleteSessions)
