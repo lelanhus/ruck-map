@@ -475,6 +475,7 @@ final class WeatherService {
         }
     }
     
+    @MainActor
     private func fetchAndConvertWeather(for location: CLLocation, weatherLocation: WeatherLocation) async throws -> WeatherConditions {
         do {
             // Fetch and immediately convert to avoid Weather sendability issues
