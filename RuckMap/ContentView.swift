@@ -6,7 +6,7 @@ struct ContentView: View {
     @Query private var sessions: [RuckSession]
     @State private var locationManager = LocationTrackingManager()
     @State private var selectedTab: Tab = .home
-    @State private var currentWeight: Double = AppConstants.defaultWeightPounds
+    @State private var currentWeight: Double = 35.0
 
     /// Navigation tabs available in the app
     enum Tab: String, CaseIterable {
@@ -108,7 +108,7 @@ struct HomeTabContent: View {
         sessions
             .filter { $0.endDate != nil }
             .sorted { $0.startDate > $1.startDate }
-            .prefix(AppConstants.recentSessionsDisplayCount)
+            .prefix(3)
             .map(\.self)
     }
 
@@ -223,10 +223,10 @@ struct HomeTabContent: View {
                             .font(.title2)
                             .foregroundColor(Color.armyGreenPrimary)
                     }
-                    .disabled(currentWeight <= AppConstants.minimumWeightPounds)
+                    .disabled(currentWeight <= 0)
                     .accessibilityLabel("Decrease weight by 5 pounds")
 
-                    Slider(value: $currentWeight, in: AppConstants.minimumWeightPounds...AppConstants.maximumWeightPounds, step: AppConstants.weightAdjustmentStep)
+                    Slider(value: $currentWeight, in: 0...200, step: 5)
                         .tint(Color.armyGreenPrimary)
                         .accessibilityLabel("Load weight slider")
                         .accessibilityValue("\(Int(currentWeight)) pounds")
@@ -236,7 +236,7 @@ struct HomeTabContent: View {
                             .font(.title2)
                             .foregroundColor(Color.armyGreenPrimary)
                     }
-                    .disabled(currentWeight >= AppConstants.maximumWeightPounds)
+                    .disabled(currentWeight >= 200)
                     .accessibilityLabel("Increase weight by 5 pounds")
                 }
             }
@@ -286,7 +286,7 @@ struct HomeTabContent: View {
 
     private func adjustWeight(_ change: Double) {
         let newWeight = currentWeight + change
-        if newWeight >= AppConstants.minimumWeightPounds && newWeight <= AppConstants.maximumWeightPounds {
+        if newWeight >= 0 && newWeight <= 200 {
             currentWeight = newWeight
         }
     }
@@ -692,325 +692,7 @@ struct ProfileTabContent: View {
 
 // MARK: - Supporting Views
 
-/// Quick stat display card
-struct StatCard: View {
-    let title: String
-    let value: String
-    let icon: String
-    let color: Color
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundColor(color)
-
-            Text(value)
-                .font(.title3)
-                .fontWeight(.bold)
-                .foregroundColor(.primary)
-
-            Text(title)
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color.ruckMapSecondaryBackground)
-        .cornerRadius(12)
-    }
-}
-
-/// Recent session row display
-struct RecentSessionRow: View {
-    let session: RuckSession
-    @AppStorage("preferredUnits") private var preferredUnits = "imperial"
-
-    private var formattedDistance: String {
-        FormatUtilities.formatDistancePrecise(session.totalDistance, units: preferredUnits)
-    }
-
-    private var formattedDuration: String {
-        FormatUtilities.formatDuration(session.totalDuration)
-    }
-
-    private var formattedDate: String {
-        FormatUtilities.formatSessionDate(session.startDate)
-    }
-
-    var body: some View {
-        HStack(spacing: 12) {
-            // Session icon
-            Image(systemName: "figure.rucking")
-                .font(.title3)
-                .foregroundColor(Color.armyGreenPrimary)
-                .frame(width: 24, height: 24)
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(formattedDistance)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-
-                    Spacer()
-
-                    Text(formattedDate)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-
-                HStack(spacing: 16) {
-                    Label(formattedDuration, systemImage: "clock")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-
-                    Label(FormatUtilities.formatWeight(session.loadWeight, units: preferredUnits), systemImage: "backpack")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-        .padding()
-        .background(Color.ruckMapSecondaryBackground)
-        .cornerRadius(8)
-    }
-}
-
-/// Statistic display item
-struct StatisticItem: View {
-    let title: String
-    let value: String
-    let icon: String
-    let color: Color
-
-    var body: some View {
-        VStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundColor(color)
-
-            Text(value)
-                .font(.headline)
-                .fontWeight(.bold)
-                .foregroundColor(.primary)
-
-            Text(title)
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
-
-/// Session row in the list
-struct SessionListRow: View {
-    let session: RuckSession
-    @AppStorage("preferredUnits") private var preferredUnits = "imperial"
-
-    private var formattedDistance: String {
-        FormatUtilities.formatDistancePrecise(session.totalDistance, units: preferredUnits)
-    }
-
-    private var formattedDuration: String {
-        FormatUtilities.formatDuration(session.totalDuration)
-    }
-
-    private var formattedDate: String {
-        FormatUtilities.formatSessionDate(session.startDate)
-    }
-
-    private var loadWeight: String {
-        FormatUtilities.formatWeight(session.loadWeight, units: preferredUnits)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(formattedDate)
-                    .font(.headline)
-                    .fontWeight(.semibold)
-
-                Spacer()
-
-                if let rpe = session.rpe {
-                    RPEBadge(rpe: rpe)
-                }
-            }
-
-            HStack(spacing: 16) {
-                MetricPill(icon: "map", value: formattedDistance, color: .blue)
-                MetricPill(icon: "clock", value: formattedDuration, color: .green)
-                MetricPill(icon: "backpack", value: loadWeight, color: .orange)
-            }
-
-            if let notes = session.notes, !notes.isEmpty {
-                Text(notes)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(2)
-            }
-        }
-        .padding(.vertical, 4)
-    }
-}
-
-/// RPE (Rating of Perceived Exertion) badge
-struct RPEBadge: View {
-    let rpe: Int
-
-    private var color: Color {
-        switch rpe {
-        case 1 ... 3:
-            .green
-        case 4 ... 6:
-            .yellow
-        case 7 ... 8:
-            .orange
-        case 9 ... 10:
-            .red
-        default:
-            .gray
-        }
-    }
-
-    var body: some View {
-        Text("RPE \(rpe)")
-            .font(.caption2)
-            .fontWeight(.semibold)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 2)
-            .background(color.opacity(0.2))
-            .foregroundColor(color)
-            .cornerRadius(8)
-    }
-}
-
-/// Small metric pill display
-struct MetricPill: View {
-    let icon: String
-    let value: String
-    let color: Color
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.caption2)
-                .foregroundColor(color)
-            Text(value)
-                .font(.caption)
-                .fontWeight(.medium)
-        }
-    }
-}
-
-/// Profile statistic card
-struct ProfileStatCard: View {
-    let title: String
-    let value: String
-    let subtitle: String
-    let icon: String
-    let color: Color
-
-    var body: some View {
-        VStack(spacing: 8) {
-            HStack {
-                Image(systemName: icon)
-                    .font(.title3)
-                    .foregroundColor(color)
-                Spacer()
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(value)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
-
-                Text(title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
-
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding()
-        .background(Color.ruckMapSecondaryBackground)
-        .cornerRadius(12)
-    }
-}
-
-/// Settings row with action
-struct SettingRow: View {
-    let icon: String
-    let title: String
-    let value: String
-    let color: Color
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack {
-                Image(systemName: icon)
-                    .font(.subheadline)
-                    .foregroundColor(color)
-                    .frame(width: 20)
-
-                Text(title)
-                    .font(.subheadline)
-                    .foregroundColor(.primary)
-
-                Spacer()
-
-                Text(value)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .padding(.vertical, 8)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-/// Settings toggle row
-struct SettingToggleRow: View {
-    let icon: String
-    let title: String
-    @Binding var isOn: Bool
-    let color: Color
-
-    var body: some View {
-        HStack {
-            Image(systemName: icon)
-                .font(.subheadline)
-                .foregroundColor(color)
-                .frame(width: 20)
-
-            Text(title)
-                .font(.subheadline)
-                .foregroundColor(.primary)
-
-            Spacer()
-
-            Toggle("", isOn: $isOn)
-                .labelsHidden()
-                .tint(Color.armyGreenPrimary)
-        }
-        .padding(.vertical, 8)
-    }
-}
+// Note: Supporting view components have been moved to their respective view files to avoid duplicates
 
 #Preview {
     ContentView()

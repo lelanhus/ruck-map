@@ -388,45 +388,6 @@ struct Achievement {
     let isEarned: Bool
 }
 
-/// Profile statistic card
-struct ProfileStatCard: View {
-    let title: String
-    let value: String
-    let subtitle: String
-    let icon: String
-    let color: Color
-    
-    var body: some View {
-        VStack(spacing: 8) {
-            HStack {
-                Image(systemName: icon)
-                    .font(.title3)
-                    .foregroundColor(color)
-                Spacer()
-            }
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(value)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
-                Text(title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
-                
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding()
-        .background(Color.ruckMapSecondaryBackground)
-        .cornerRadius(12)
-    }
-}
 
 /// Achievement badge
 struct AchievementBadge: View {
@@ -494,6 +455,48 @@ struct PerformanceRow: View {
     }
 }
 
+
+
+/// Profile statistic card
+struct ProfileStatCard: View {
+    let title: String
+    let value: String
+    let subtitle: String
+    let icon: String
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.title3)
+                    .foregroundColor(color)
+                Spacer()
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value)
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
+
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary)
+
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding()
+        .background(Color.ruckMapSecondaryBackground)
+        .cornerRadius(12)
+    }
+}
+
 /// Settings row with action
 struct SettingRow: View {
     let icon: String
@@ -501,7 +504,7 @@ struct SettingRow: View {
     let value: String
     let color: Color
     let action: () -> Void
-    
+
     var body: some View {
         Button(action: action) {
             HStack {
@@ -509,17 +512,17 @@ struct SettingRow: View {
                     .font(.subheadline)
                     .foregroundColor(color)
                     .frame(width: 20)
-                
+
                 Text(title)
                     .font(.subheadline)
                     .foregroundColor(.primary)
-                
+
                 Spacer()
-                
+
                 Text(value)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                
+
                 Image(systemName: "chevron.right")
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -536,20 +539,20 @@ struct SettingToggleRow: View {
     let title: String
     @Binding var isOn: Bool
     let color: Color
-    
+
     var body: some View {
         HStack {
             Image(systemName: icon)
                 .font(.subheadline)
                 .foregroundColor(color)
                 .frame(width: 20)
-            
+
             Text(title)
                 .font(.subheadline)
                 .foregroundColor(.primary)
-            
+
             Spacer()
-            
+
             Toggle("", isOn: $isOn)
                 .labelsHidden()
                 .tint(.armyGreenPrimary)
