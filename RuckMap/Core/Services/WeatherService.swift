@@ -573,7 +573,6 @@ final class WeatherService {
     }
     
     private func cleanupExpiredCacheEntries() {
-        let now = Date()
         weatherCache = weatherCache.filter { _, entry in
             !entry.isExpired
         }

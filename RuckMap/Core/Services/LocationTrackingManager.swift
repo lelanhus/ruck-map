@@ -654,7 +654,7 @@ final class LocationTrackingManager: NSObject {
         Task {
             for await (factor, confidence, terrainType) in terrainDetectionManager.terrainFactorStream() {
                 // Update calorie calculator with new terrain factor
-                await calorieCalculator.updateTerrainFactor(factor)
+                calorieCalculator.updateTerrainFactor(factor)
                 
                 // Log significant terrain changes
                 if confidence > 0.8 {
@@ -891,7 +891,7 @@ final class LocationTrackingManager: NSObject {
             
             // Check if we've moved significantly since last weather update
             if let lastWeatherLocation = session.weatherConditions {
-                let weatherLocation = CLLocation(
+                let _ = CLLocation(
                     latitude: lastWeatherLocation.timestamp.timeIntervalSince1970, // This is wrong, need to store weather location
                     longitude: 0 // This is also wrong
                 )
