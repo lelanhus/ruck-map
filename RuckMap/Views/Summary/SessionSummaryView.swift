@@ -142,7 +142,7 @@ class SessionSummaryViewModel {
         }
         
         // Clean up speech recognition resources
-        speechRecognizer.delegate = nil
+        speechRecognizer?.delegate = nil
         recognitionTask?.cancel()
         recognitionTask = nil
         recognitionRequest = nil

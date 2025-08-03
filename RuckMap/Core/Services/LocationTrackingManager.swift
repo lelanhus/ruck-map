@@ -5,6 +5,14 @@ import SwiftData
 import Observation
 import UIKit
 
+/// Legacy location tracking manager - being replaced by actor-based architecture
+/// 
+/// - Important: This class is deprecated and will be removed in a future version.
+///   New code should use LocationTrackingFacade instead, which provides the same API
+///   but delegates to the new actor-based components for better performance and safety.
+/// 
+/// - SeeAlso: LocationTrackingFacade, LocationCore, LocationProcessor, MetricsCalculator
+@available(*, deprecated, message: "Use LocationTrackingFacade instead for new code. This class will be removed in a future version.")
 // MARK: - Tracking State
 enum TrackingState: String, CaseIterable, Sendable {
     case stopped
@@ -54,6 +62,7 @@ enum GPSAccuracy: String, CaseIterable {
 // MARK: - Location Tracking Manager
 @Observable
 @MainActor
+@available(*, deprecated, message: "Use LocationTrackingFacade instead for new code. This class will be removed in a future version.")
 final class LocationTrackingManager: NSObject {
     // MARK: - Published Properties
     var currentLocation: CLLocation?
