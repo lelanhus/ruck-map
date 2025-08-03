@@ -4,6 +4,19 @@ import SwiftUI
 import CoreLocation
 import Observation
 
+/// Configuration for map interaction capabilities
+struct MapInteractionModes: OptionSet {
+    let rawValue: Int
+    
+    static let pan = MapInteractionModes(rawValue: 1 << 0)
+    static let zoom = MapInteractionModes(rawValue: 1 << 1)
+    static let pitch = MapInteractionModes(rawValue: 1 << 2)
+    static let rotate = MapInteractionModes(rawValue: 1 << 3)
+    
+    static let all: MapInteractionModes = [.pan, .zoom, .pitch, .rotate]
+    static let basic: MapInteractionModes = [.pan, .zoom]
+}
+
 /// MapKit integration for RuckMap with real-time route tracking
 /// 
 /// This view provides a complete map interface featuring:

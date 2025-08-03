@@ -7,7 +7,7 @@ struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var sessions: [RuckSession]
     @State var locationManager: LocationTrackingManager
-    @State private var currentWeight: Double = AppConstants.defaultWeightPounds
+    @State private var currentWeight: Double = 35.0
     @AppStorage("preferredUnits") private var preferredUnits = "imperial"
     @State private var showingErrorAlert = false
     @State private var errorMessage = ""
@@ -19,7 +19,7 @@ struct HomeView: View {
         sessions
             .filter { $0.endDate != nil }
             .sorted { $0.startDate > $1.startDate }
-            .prefix(AppConstants.recentSessionsDisplayCount)
+            .prefix(3)
             .map { $0 }
     }
     
@@ -74,7 +74,7 @@ struct HomeView: View {
         VStack(spacing: 12) {
             Image(systemName: "figure.rucking")
                 .font(.system(size: 64))
-                .foregroundStyle(.armyGreenPrimary)
+                .foregroundColor(.armyGreenPrimary)
                 .accessibilityLabel("RuckMap app icon")
             
             VStack(spacing: 4) {
@@ -133,10 +133,10 @@ struct HomeView: View {
                             .font(.title2)
                             .foregroundColor(.armyGreenPrimary)
                     }
-                    .disabled(currentWeight <= AppConstants.minimumWeightPounds)
+                    .disabled(currentWeight <= 0)
                     .accessibilityLabel("Decrease weight by 5 pounds")
                     
-                    Slider(value: $currentWeight, in: AppConstants.minimumWeightPounds...AppConstants.maximumWeightPounds, step: AppConstants.weightAdjustmentStep)
+                    Slider(value: $currentWeight, in: 0...200, step: 5)
                         .tint(.armyGreenPrimary)
                         .accessibilityLabel("Load weight slider")
                         .accessibilityValue("\(Int(currentWeight)) pounds")
@@ -146,7 +146,7 @@ struct HomeView: View {
                             .font(.title2)
                             .foregroundColor(.armyGreenPrimary)
                     }
-                    .disabled(currentWeight >= AppConstants.maximumWeightPounds)
+                    .disabled(currentWeight >= 200)
                     .accessibilityLabel("Increase weight by 5 pounds")
                 }
             }
@@ -198,7 +198,7 @@ struct HomeView: View {
     
     private func adjustWeight(_ change: Double) {
         let newWeight = currentWeight + change
-        if newWeight >= AppConstants.minimumWeightPounds && newWeight <= AppConstants.maximumWeightPounds {
+        if newWeight >= 0 && newWeight <= 200 {
             currentWeight = newWeight
         }
     }
