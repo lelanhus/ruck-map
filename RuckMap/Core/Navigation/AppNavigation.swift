@@ -5,7 +5,7 @@ import SwiftUI
 /// Provides type-safe navigation and tab coordination following iOS 18+ patterns
 @Observable
 @MainActor
-final class AppNavigation: Sendable {
+final class AppNavigation {
     // MARK: - Tab Navigation State
 
     /// Currently selected tab
@@ -178,8 +178,9 @@ final class AppNavigation: Sendable {
 // MARK: - Environment Integration
 
 /// Environment key for AppNavigation
-struct AppNavigationKey: EnvironmentKey {
-    nonisolated(unsafe) static let defaultValue = AppNavigation()
+struct AppNavigationKey: @preconcurrency EnvironmentKey {
+    @MainActor
+    static let defaultValue = AppNavigation()
 }
 
 extension EnvironmentValues {

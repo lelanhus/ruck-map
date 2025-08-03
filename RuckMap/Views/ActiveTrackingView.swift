@@ -3,6 +3,35 @@ import MapKit
 import SwiftData
 import SwiftUI
 
+// Temporary MapView stub for build verification
+// TODO: Remove when MapView.swift is properly included in target
+struct MapView: View {
+    @State var locationManager: LocationTrackingManager
+    let showCurrentLocation: Bool
+    let followUser: Bool
+    let showTerrain: Bool
+    let interactionModes: MapInteractionModes
+    
+    var body: some View {
+        Map()
+            .overlay(
+                Text("Map Integration\n(Build Verification)")
+                    .font(.caption)
+                    .padding(8)
+                    .background(Color.black.opacity(0.7))
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                    .padding(),
+                alignment: .topTrailing
+            )
+    }
+}
+
+struct MapInteractionModes: OptionSet {
+    let rawValue: Int
+    static let all = MapInteractionModes(rawValue: 1)
+}
+
 struct ActiveTrackingView: View {
     @State var locationManager: LocationTrackingManager
     @Environment(\.modelContext)
@@ -510,15 +539,14 @@ struct ActiveTrackingView: View {
     
     private var mapTabView: some View {
         ZStack {
-            // Main map view (temporarily disabled for build)
-            Rectangle()
-                .fill(Color.gray.opacity(0.3))
-                .overlay(
-                    Text("Map View\n(Temporarily Disabled)")
-                        .font(.title2)
-                        .multilineTextAlignment(.center)
-                        .foregroundColor(.secondary)
-                )
+            // Main map view
+            MapView(
+                locationManager: locationManager,
+                showCurrentLocation: true,
+                followUser: true,
+                showTerrain: true,
+                interactionModes: .all
+            )
             
             // Floating metrics overlay on map
             VStack {

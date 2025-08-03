@@ -505,10 +505,29 @@ final class MapPresentation {
     }
     
     private func createTerrainOverlay(for result: TerrainDetectionResult) -> TerrainOverlay? {
-        // Simplified terrain overlay creation
-        // In a full implementation, this would create polygon overlays
-        // based on the terrain detection areas
-        return nil
+        guard result.confidence > 0.5,
+              let location = locationManager.currentLocation else {
+            return nil
+        }
+        
+        // Create a circular overlay around the current position
+        // representing the detected terrain type
+        let center = location.coordinate
+        let radius: Double = 50.0 // 50 meter radius for terrain visualization
+        
+        // Generate circle coordinates for the overlay
+        let circleCoordinates = MapKitUtilities.createCircularPolygon(
+            center: center,
+            radius: radius,
+            points: 36 // 36 points for smooth circle
+        )
+        
+        return TerrainOverlay(
+            id: UUID(),
+            coordinates: circleCoordinates,
+            terrainType: result.terrainType,
+            confidence: result.confidence
+        )
     }
 }
 

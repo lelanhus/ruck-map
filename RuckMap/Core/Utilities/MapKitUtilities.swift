@@ -14,6 +14,17 @@ import CoreLocation
 @MainActor
 struct MapKitUtilities {
     
+    // MARK: - Constants
+    
+    /// Approximate meters per degree of latitude
+    private static let metersPerDegreeLatitude: Double = 111320.0
+    
+    /// Default coordinate span for single-point regions
+    private static let defaultCoordinateSpan = MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+    
+    /// Default San Francisco coordinates for fallback
+    private static let defaultCoordinate = CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194)
+    
     // MARK: - Region Calculations
     
     /// Calculates optimal map region for displaying a route
@@ -22,8 +33,8 @@ struct MapKitUtilities {
     static func calculateRouteRegion(for locations: [CLLocationCoordinate2D]) -> MKCoordinateRegion {
         guard !locations.isEmpty else {
             return MKCoordinateRegion(
-                center: CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194), // Default to SF
-                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+                center: defaultCoordinate,
+                span: defaultCoordinateSpan
             )
         }
         
@@ -349,8 +360,8 @@ struct MapKitUtilities {
         var coordinates: [CLLocationCoordinate2D] = []
         
         // Approximate conversion from meters to degrees (rough, but sufficient for visualization)
-        let latitudeDelta = radius / 111320.0 // meters per degree latitude
-        let longitudeDelta = radius / (111320.0 * cos(center.latitude * .pi / 180))
+        let latitudeDelta = radius / metersPerDegreeLatitude
+        let longitudeDelta = radius / (metersPerDegreeLatitude * cos(center.latitude * .pi / 180))
         
         for i in 0..<points {
             let angle = Double(i) * 2 * .pi / Double(points)
