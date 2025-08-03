@@ -10,10 +10,10 @@ import CoreLocation
  */
 
 // MARK: - WeatherKit Configuration Validator
-@MainActor
 struct WeatherKitSetupValidator {
     
     /// Validates that WeatherKit is properly configured
+    @MainActor
     static func validateWeatherKitSetup() -> WeatherKitSetupResult {
         var issues: [WeatherKitSetupIssue] = []
         

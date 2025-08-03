@@ -533,6 +533,7 @@ struct CalorieMetricCard: View {
         .cornerRadius(15)
         .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
     }
+}
 
 // MARK: - Weather Card Component
 
@@ -567,12 +568,12 @@ struct WeatherCard: View {
             
             HStack(spacing: 16) {
                 weatherDetail(
-                    icon: "humidity",
+                    icon: "humidity.fill",
                     value: "\(Int(conditions.humidity))%"
                 )
                 
                 weatherDetail(
-                    icon: "wind",
+                    icon: "wind.circle.fill",
                     value: "\(Int(conditions.windSpeedMPH)) mph"
                 )
                 

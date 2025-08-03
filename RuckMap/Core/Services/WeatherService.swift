@@ -59,9 +59,49 @@ enum WeatherServiceError: LocalizedError, Sendable {
     }
 }
 
+// MARK: - Lightweight Weather Data for Caching
+struct CachedWeatherData: Codable, Sendable {
+    let timestamp: Date
+    let temperature: Double // Celsius
+    let humidity: Double // percentage (0-100)
+    let windSpeed: Double // m/s
+    let windDirection: Double // degrees
+    let precipitation: Double // mm/hr
+    let pressure: Double // hPa
+    let weatherDescription: String?
+    let conditionCode: String?
+    
+    init(from conditions: WeatherConditions) {
+        self.timestamp = conditions.timestamp
+        self.temperature = conditions.temperature
+        self.humidity = conditions.humidity
+        self.windSpeed = conditions.windSpeed
+        self.windDirection = conditions.windDirection
+        self.precipitation = conditions.precipitation
+        self.pressure = conditions.pressure
+        self.weatherDescription = conditions.weatherDescription
+        self.conditionCode = conditions.conditionCode
+    }
+    
+    func toWeatherConditions() -> WeatherConditions {
+        let conditions = WeatherConditions(
+            timestamp: timestamp,
+            temperature: temperature,
+            humidity: humidity,
+            windSpeed: windSpeed,
+            windDirection: windDirection,
+            precipitation: precipitation,
+            pressure: pressure
+        )
+        conditions.weatherDescription = weatherDescription
+        conditions.conditionCode = conditionCode
+        return conditions
+    }
+}
+
 // MARK: - Weather Cache Entry
 struct WeatherCacheEntry: Codable, Sendable {
-    let conditions: WeatherConditions
+    let conditions: CachedWeatherData
     let location: WeatherLocation
     let timestamp: Date
     let expirationDate: Date
@@ -279,7 +319,7 @@ final class WeatherService {
             cacheHits += 1
             updateCacheHitRate()
             weatherUpdateStatus = "Using cached weather data"
-            return cachedEntry.conditions
+            return cachedEntry.conditions.toWeatherConditions()
         }
         
         // Check rate limiting
@@ -287,7 +327,7 @@ final class WeatherService {
             // Try to find any valid cached data within reasonable distance
             if let fallbackEntry = findNearestValidCacheEntry(for: weatherLocation) {
                 weatherUpdateStatus = "Rate limited - using cached data"
-                return fallbackEntry.conditions
+                return fallbackEntry.conditions.toWeatherConditions()
             }
             throw WeatherServiceError.apiRateLimitExceeded
         }
@@ -313,7 +353,7 @@ final class WeatherService {
             // If API fails, try cached data as fallback
             if let fallbackEntry = findNearestValidCacheEntry(for: weatherLocation) {
                 weatherUpdateStatus = "API failed - using cached data"
-                return fallbackEntry.conditions
+                return fallbackEntry.conditions.toWeatherConditions()
             }
             
             weatherUpdateStatus = "Weather update failed"
@@ -446,18 +486,20 @@ final class WeatherService {
     }
     
     private func convertToWeatherConditions(_ weather: Weather, location: WeatherLocation) -> WeatherConditions {
+        let currentWeather = weather.currentWeather
+        
         let conditions = WeatherConditions(
             timestamp: Date(),
-            temperature: weather.currentWeather.temperature.value,
-            humidity: weather.currentWeather.humidity * 100, // Convert to percentage
-            windSpeed: weather.currentWeather.wind.speed?.value ?? 0,
-            windDirection: weather.currentWeather.wind.direction?.value ?? 0,
-            precipitation: weather.currentWeather.precipitation.value ?? 0,
-            pressure: weather.currentWeather.pressure.value
+            temperature: currentWeather.temperature.value,
+            humidity: currentWeather.humidity * 100, // Convert to percentage
+            windSpeed: currentWeather.wind.speed?.value ?? 0,
+            windDirection: currentWeather.wind.direction?.value ?? 0,
+            precipitation: 0, // CurrentWeather doesn't have precipitation - use forecast if needed
+            pressure: currentWeather.pressure.value
         )
         
-        conditions.weatherDescription = weather.currentWeather.condition.description
-        conditions.conditionCode = weather.currentWeather.condition.rawValue
+        conditions.weatherDescription = currentWeather.condition.description
+        conditions.conditionCode = String(currentWeather.condition.rawValue)
         
         return conditions
     }
@@ -474,7 +516,7 @@ final class WeatherService {
         let expirationDate = Date().addingTimeInterval(configuration.cacheExpirationTime)
         
         let entry = WeatherCacheEntry(
-            conditions: conditions,
+            conditions: CachedWeatherData(from: conditions),
             location: location,
             timestamp: Date(),
             expirationDate: expirationDate
