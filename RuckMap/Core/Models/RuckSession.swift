@@ -15,11 +15,11 @@ final class RuckSession {
     var elevationLoss: Double // meters
     var maxElevation: Double // meters
     var minElevation: Double // meters
-    var averageGrade: Double // percentage
-    var maxGrade: Double // percentage
-    var minGrade: Double // percentage
-    var elevationAccuracy: Double // average accuracy in meters
-    var barometerDataPoints: Int // number of barometric readings
+    var averageGrade: Double = 0.0 // percentage
+    var maxGrade: Double = 0.0 // percentage
+    var minGrade: Double = 0.0 // percentage
+    var elevationAccuracy: Double = 0.0 // average accuracy in meters
+    var barometerDataPoints: Int = 0 // number of barometric readings
     var rpe: Int? // Rating of Perceived Exertion (1-10)
     var notes: String?
     var voiceNoteURL: URL?
