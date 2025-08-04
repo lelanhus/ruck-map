@@ -135,7 +135,7 @@ final class HealthKitManager {
         authorizationStatus = heartRateStatus
         isAuthorized = heartRateStatus == .sharingAuthorized && workoutStatus != .sharingDenied
         
-        logger.debug("Authorization status check - Heart Rate: \(heartRateStatus.rawValue), Authorized: \(isAuthorized)")
+        logger.debug("Authorization status check - Heart Rate: \(heartRateStatus.rawValue), Authorized: \(self.isAuthorized)")
     }
     
     // MARK: - Body Metrics
@@ -440,10 +440,10 @@ final class HealthKitManager {
         configuration.locationType = .outdoor
         
         do {
-            // Create workout session
+            #if os(watchOS)
+            // Create workout session (only available on watchOS)
             activeWorkoutSession = try HKWorkoutSession(healthStore: healthStore, configuration: configuration)
             
-            #if os(watchOS)
             // Create workout builder (only available on watchOS)
             workoutBuilder = activeWorkoutSession?.associatedWorkoutBuilder()
             workoutBuilder?.dataSource = HKLiveWorkoutDataSource(
@@ -455,9 +455,9 @@ final class HealthKitManager {
             // Create route builder for GPS tracking
             workoutRouteBuilder = HKWorkoutRouteBuilder(healthStore: healthStore, device: nil)
             
+            #if os(watchOS)
             // Start the session
             activeWorkoutSession?.startActivity(with: Date())
-            #if os(watchOS)
             try await workoutBuilder?.beginCollection(at: Date())
             #endif
             
@@ -487,6 +487,7 @@ final class HealthKitManager {
     
     /// End the active workout session
     func endWorkoutSession() async {
+        #if os(watchOS)
         guard let session = activeWorkoutSession,
               let builder = workoutBuilder else {
             logger.warning("No active workout session to end")
@@ -512,6 +513,11 @@ final class HealthKitManager {
             logger.error("Failed to end workout session: \(error.localizedDescription)")
             lastError = HealthKitError.workoutSessionFailed(error)
         }
+        #else
+        // On iOS, we only have route builder to clean up
+        workoutRouteBuilder = nil
+        logger.info("Workout session ended (iOS - route only)")
+        #endif
     }
     
     // MARK: - Workout Saving

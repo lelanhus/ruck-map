@@ -305,5 +305,6 @@ struct PermissionBenefitRow: View {
 }
 
 #Preview {
-    HealthKitPermissionsView(healthKitManager: HealthKitManager())
+    HealthKitPermissionsView()
+        .environment(HealthKitManager())
 }
