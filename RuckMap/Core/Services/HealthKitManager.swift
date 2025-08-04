@@ -11,6 +11,20 @@ final class HealthKitManager: Sendable {
     private let logger = Logger(subsystem: "com.ruckmap.app", category: "HealthKitManager")
     private let healthStore = HKHealthStore()
     
+    // MARK: - Constants
+    
+    private enum Constants {
+        static let heartRateHistoryWindow: TimeInterval = 300 // 5 minutes
+        static let bodyCacheExpiration: TimeInterval = 86400 // 24 hours
+        static let sampleInterval: TimeInterval = 300 // 5 minutes
+        static let minValidWeight: Double = 20 // kg
+        static let maxValidWeight: Double = 300 // kg
+        static let minValidHeight: Double = 0.5 // meters
+        static let maxValidHeight: Double = 2.5 // meters
+        static let minValidHeartRate: Double = 30 // bpm
+        static let maxValidHeartRate: Double = 250 // bpm
+    }
+    
     // Published state
     var isHealthKitAvailable: Bool = false
     var authorizationStatus: HKAuthorizationStatus = .notDetermined
@@ -26,6 +40,8 @@ final class HealthKitManager: Sendable {
     private var heartRateObserver: HKObserverQuery?
     private var currentHeartRateQuery: HKAnchoredObjectQuery?
     private var backgroundDeliveryEnabled = false
+    private var lastHeartRateUpdateTime: Date?
+    private let heartRateUpdateInterval: TimeInterval = 1.0 // Minimum 1 second between updates
     
     // Workout session tracking
     private var activeWorkoutSession: HKWorkoutSession?
@@ -43,6 +59,11 @@ final class HealthKitManager: Sendable {
         } else {
             logger.warning("HealthKit is not available on this device")
         }
+        
+        // TODO: Future enhancement - Battery usage monitoring
+        // Track battery level changes during workouts to validate <10%/hour target
+        // Implementation would use UIDevice.current.batteryLevel monitoring
+        // and correlate with workout duration for performance metrics
     }
     
     // MARK: - Authorization
@@ -126,7 +147,7 @@ final class HealthKitManager: Sendable {
         
         // Check cache first (refresh every 24 hours)
         if let lastUpdate = lastBodyMetricsUpdate,
-           Date().timeIntervalSince(lastUpdate) < 86400, // 24 hours
+           Date().timeIntervalSince(lastUpdate) < Constants.bodyCacheExpiration,
            let cachedWeight = cachedBodyMass,
            let cachedHeight = cachedHeight {
             logger.debug("Returning cached body metrics")
@@ -176,6 +197,14 @@ final class HealthKitManager: Sendable {
                 }
                 
                 let weightInKg = sample.quantity.doubleValue(for: HKUnit.gramUnit(with: .kilo))
+                
+                // Validate reasonable weight range (20kg - 300kg)
+                guard weightInKg > Constants.minValidWeight && weightInKg < Constants.maxValidWeight else {
+                    self.logger.warning("Invalid body weight from HealthKit: \(weightInKg)kg")
+                    continuation.resume(returning: nil)
+                    return
+                }
+                
                 continuation.resume(returning: weightInKg)
             }
             
@@ -206,6 +235,14 @@ final class HealthKitManager: Sendable {
                 }
                 
                 let heightInMeters = sample.quantity.doubleValue(for: HKUnit.meter())
+                
+                // Validate reasonable height range (0.5m - 2.5m)
+                guard heightInMeters > Constants.minValidHeight && heightInMeters < Constants.maxValidHeight else {
+                    self.logger.warning("Invalid height from HealthKit: \(heightInMeters)m")
+                    continuation.resume(returning: nil)
+                    return
+                }
+                
                 continuation.resume(returning: heightInMeters)
             }
             
@@ -270,6 +307,19 @@ final class HealthKitManager: Sendable {
             if let latestSample = samples.sorted(by: { $0.endDate > $1.endDate }).first {
                 let heartRate = latestSample.quantity.doubleValue(for: HKUnit.count().unitDivided(by: HKUnit.minute()))
                 
+                // Validate heart rate is within reasonable bounds
+                guard heartRate >= Constants.minValidHeartRate && heartRate <= Constants.maxValidHeartRate else {
+                    self?.logger.warning("Invalid heart rate reading: \(heartRate) bpm")
+                    return
+                }
+                
+                // Rate limiting - prevent UI flooding
+                if let lastUpdate = self?.lastHeartRateUpdateTime,
+                   Date().timeIntervalSince(lastUpdate) < (self?.heartRateUpdateInterval ?? 1.0) {
+                    return
+                }
+                
+                self?.lastHeartRateUpdateTime = Date()
                 self?.logger.debug("Received heart rate update: \(heartRate) bpm")
                 
                 Task { @MainActor in
@@ -290,16 +340,34 @@ final class HealthKitManager: Sendable {
             for sample in samples.sorted(by: { $0.endDate > $1.endDate }) {
                 let heartRate = sample.quantity.doubleValue(for: HKUnit.count().unitDivided(by: HKUnit.minute()))
                 
+                // Validate heart rate is within reasonable bounds
+                guard heartRate >= Constants.minValidHeartRate && heartRate <= Constants.maxValidHeartRate else {
+                    self?.logger.warning("Invalid real-time heart rate reading: \(heartRate) bpm")
+                    continue
+                }
+                
+                // Rate limiting - prevent UI flooding
+                if let lastUpdate = self?.lastHeartRateUpdateTime,
+                   Date().timeIntervalSince(lastUpdate) < (self?.heartRateUpdateInterval ?? 1.0) {
+                    continue
+                }
+                
+                self?.lastHeartRateUpdateTime = Date()
                 self?.logger.debug("Real-time heart rate update: \(heartRate) bpm")
                 
                 Task { @MainActor in
                     self?.onHeartRateUpdate?(heartRate)
                 }
-                break // Only use most recent
+                break // Only use most recent valid reading
             }
         }
         
-        healthStore.execute(currentHeartRateQuery!)
+        guard let query = currentHeartRateQuery else {
+            logger.error("Heart rate query is nil when trying to execute")
+            throw HealthKitError.invalidDataType
+        }
+        
+        healthStore.execute(query)
     }
     
     /// Stop heart rate monitoring
@@ -492,9 +560,15 @@ final class HealthKitManager: Sendable {
             do {
                 let workoutRoute = try await createWorkoutRoute(from: route, workout: workout)
                 samplesToSave.append(workoutRoute)
+                logger.info("Successfully created workout route with \(route.count) locations")
             } catch {
                 logger.warning("Failed to create workout route: \(error.localizedDescription)")
-                // Continue without route
+                // Store partial error but continue with workout save
+                // This allows the workout to be saved even if route creation fails
+                lastError = HealthKitError.workoutSaveFailed(error)
+                
+                // Consider storing route data separately for later retry
+                logger.info("Workout will be saved without route data")
             }
         }
         
@@ -546,7 +620,7 @@ final class HealthKitManager: Sendable {
         }
         
         let duration = endDate.timeIntervalSince(startDate)
-        let samplesCount = max(1, Int(duration / 300)) // One sample every 5 minutes
+        let samplesCount = max(1, Int(duration / Constants.sampleInterval)) // One sample every 5 minutes
         let caloriesPerSample = totalCalories / Double(samplesCount)
         
         var samples: [HKQuantitySample] = []
@@ -575,7 +649,7 @@ final class HealthKitManager: Sendable {
         }
         
         let duration = endDate.timeIntervalSince(startDate)
-        let samplesCount = max(1, Int(duration / 300)) // One sample every 5 minutes
+        let samplesCount = max(1, Int(duration / Constants.sampleInterval)) // One sample every 5 minutes
         let distancePerSample = totalDistance / Double(samplesCount)
         
         var samples: [HKQuantitySample] = []
@@ -610,10 +684,7 @@ final class HealthKitManager: Sendable {
     // MARK: - Cleanup
     
     deinit {
-        Task {
-            await disableBackgroundDelivery()
-        }
-        
+        // Synchronous cleanup only
         if let query = currentHeartRateQuery {
             healthStore.stop(query)
         }
@@ -621,6 +692,10 @@ final class HealthKitManager: Sendable {
         if let observer = heartRateObserver {
             healthStore.stop(observer)
         }
+        
+        // Note: Background delivery cannot be disabled synchronously
+        // It will be re-enabled on next app launch if needed
+        logger.info("HealthKitManager deinitialized")
     }
 }
 
