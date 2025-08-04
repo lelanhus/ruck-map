@@ -3,7 +3,8 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
-    @State private var locationManager = LocationTrackingManager()
+    @EnvironmentObject private var dataCoordinator: DataCoordinator
+    @State private var locationManager: LocationTrackingManager?
     @State private var selectedTab: Tab = .home
     @State private var currentWeight: Double = 35.0
 
@@ -40,11 +41,16 @@ struct ContentView: View {
         TabView(selection: $selectedTab) {
             // Home Tab
             NavigationStack {
-                HomeTabView(
-                    locationManager: locationManager,
-                    currentWeight: $currentWeight,
-                    selectedTab: $selectedTab
-                )
+                if let locationManager = locationManager {
+                    HomeTabView(
+                        locationManager: locationManager,
+                        currentWeight: $currentWeight,
+                        selectedTab: $selectedTab
+                    )
+                } else {
+                    ProgressView("Initializing tracking...")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
             .tabItem {
                 Label(
@@ -80,9 +86,20 @@ struct ContentView: View {
         }
         .tint(Color.armyGreenPrimary)
         .onAppear {
-            locationManager.setModelContext(modelContext)
-            locationManager.requestLocationPermission()
+            initializeLocationManager()
         }
+    }
+    
+    private func initializeLocationManager() {
+        // Initialize LocationTrackingManager with HealthKit integration
+        if dataCoordinator.healthKitManager.isHealthKitAvailable {
+            locationManager = LocationTrackingManager(healthKitManager: dataCoordinator.healthKitManager)
+        } else {
+            locationManager = LocationTrackingManager()
+        }
+        
+        locationManager?.setModelContext(modelContext)
+        locationManager?.requestLocationPermission()
     }
 }
 

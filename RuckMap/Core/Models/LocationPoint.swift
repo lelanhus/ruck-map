@@ -131,6 +131,16 @@ final class LocationPoint: @unchecked Sendable {
         self.pressure = pressure
     }
     
+    /// Updates heart rate data from HealthKit
+    func updateHeartRate(_ heartRate: Double?) {
+        self.heartRate = heartRate
+    }
+    
+    /// Returns true if this point has heart rate data
+    var hasHeartRate: Bool {
+        return heartRate != nil && heartRate! > 0
+    }
+    
     /// Calculates elevation change to another point using best available altitude
     func elevationChange(to other: LocationPoint) -> Double {
         return other.bestAltitude - self.bestAltitude

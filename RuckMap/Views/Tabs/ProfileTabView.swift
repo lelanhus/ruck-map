@@ -4,10 +4,12 @@ import SwiftData
 /// Profile tab view - user stats and settings
 struct ProfileTabView: View {
     @Query private var sessions: [RuckSession]
+    @EnvironmentObject private var dataCoordinator: DataCoordinator
     @AppStorage("preferredUnits") private var preferredUnits = "imperial"
     @AppStorage("enableHaptics") private var enableHaptics = true
     @AppStorage("showCalorieImpact") private var showCalorieImpact = true
     @State private var showingSettingsSheet = false
+    @State private var showingHealthKitPermissions = false
 
     private var completedSessions: [RuckSession] {
         sessions.filter { $0.endDate != nil }
@@ -74,6 +76,9 @@ struct ProfileTabView: View {
                     }
                 }
             }
+        }
+        .sheet(isPresented: $showingHealthKitPermissions) {
+            HealthKitPermissionsView(healthKitManager: dataCoordinator.healthKitManager)
         }
     }
 
@@ -180,6 +185,18 @@ struct ProfileTabView: View {
                     isOn: $showCalorieImpact,
                     color: .orange
                 )
+                
+                if dataCoordinator.healthKitManager.isHealthKitAvailable {
+                    Divider()
+                        .padding(.leading, 44)
+                    
+                    HealthKitSettingRow(
+                        healthKitManager: dataCoordinator.healthKitManager,
+                        onTap: {
+                            showingHealthKitPermissions = true
+                        }
+                    )
+                }
             }
             .padding()
             .background(Color.ruckMapSecondaryBackground)
@@ -298,5 +315,52 @@ struct SettingToggleRow: View {
                 .labelsHidden()
         }
         .padding(.vertical, 8)
+    }
+}
+
+/// HealthKit settings row
+struct HealthKitSettingRow: View {
+    @ObservedObject var healthKitManager: HealthKitManager
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            HStack {
+                Image(systemName: "heart.fill")
+                    .font(.title3)
+                    .foregroundColor(.red)
+                    .frame(width: 28)
+                
+                Text("Apple Health")
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                Text(healthKitStatusText)
+                    .foregroundColor(.secondary)
+                    .font(.subheadline)
+                
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundColor(.tertiary)
+            }
+            .padding(.vertical, 8)
+        }
+        .buttonStyle(.plain)
+        .onAppear {
+            healthKitManager.checkAuthorizationStatus()
+        }
+    }
+    
+    private var healthKitStatusText: String {
+        if !healthKitManager.isHealthKitAvailable {
+            return "Unavailable"
+        } else if healthKitManager.isAuthorized {
+            return "Connected"
+        } else if healthKitManager.authorizationStatus == .sharingDenied {
+            return "Denied"
+        } else {
+            return "Not Connected"
+        }
     }
 }

@@ -136,6 +136,42 @@ final class LocationTrackingManager: NSObject {
         setupBatteryOptimization()
     }
     
+    /// Initialize with HealthKit integration
+    init(healthKitManager: HealthKitManager) {
+        // Initialize dependencies with HealthKit integration
+        self.adaptiveGPSManager = AdaptiveGPSManager()
+        self.motionLocationManager = MotionLocationManager()
+        self.elevationManager = ElevationManager()
+        self.batteryOptimizationManager = BatteryOptimizationManager()
+        self.calorieCalculator = CalorieCalculator(healthKitManager: healthKitManager)
+        self.terrainDetectionManager = TerrainDetectionManager()
+        self.weatherService = WeatherService()
+        
+        super.init()
+        setupLocationManager()
+        setupMotionLocationManager()
+        setupElevationManager()
+        setupBatteryOptimization()
+        setupHealthKitIntegration(healthKitManager)
+    }
+    
+    private func setupHealthKitIntegration(_ healthKitManager: HealthKitManager) {
+        // Set up heart rate monitoring callbacks
+        healthKitManager.onHeartRateUpdate = { [weak self] heartRate in
+            Task { @MainActor in
+                self?.updateCurrentHeartRate(heartRate)
+            }
+        }
+    }
+    
+    private func updateCurrentHeartRate(_ heartRate: Double) {
+        // Update the most recent location point with heart rate data
+        guard let session = currentSession,
+              let lastPoint = session.locationPoints.last else { return }
+        
+        lastPoint.updateHeartRate(heartRate)
+    }
+    
     func setModelContext(_ context: ModelContext) {
         self.modelContext = context
         weatherService.setModelContext(context)
@@ -228,7 +264,7 @@ final class LocationTrackingManager: NSObject {
         
         // Start calorie calculation if session has load weight
         if session.loadWeight > 0 {
-            startCalorieTracking(bodyWeight: 70.0, loadWeight: session.loadWeight) // TODO: Get actual body weight from user profile
+            startCalorieTracking(bodyWeight: 70.0, loadWeight: session.loadWeight) // bodyWeight will be overridden by HealthKit
         }
         
         // Start auto-pause monitoring
@@ -264,7 +300,7 @@ final class LocationTrackingManager: NSObject {
         
         // Resume calorie calculation if session has load weight
         if let session = currentSession, session.loadWeight > 0 {
-            startCalorieTracking(bodyWeight: 70.0, loadWeight: session.loadWeight) // TODO: Get actual body weight from user profile
+            startCalorieTracking(bodyWeight: 70.0, loadWeight: session.loadWeight) // bodyWeight will be overridden by HealthKit
         }
         
         // Restart terrain factor monitoring
@@ -629,11 +665,34 @@ final class LocationTrackingManager: NSObject {
         return batteryOptimizationManager.getOptimizationReport()
     }
     
-    /// Start calorie tracking with body and load weight using enhanced terrain integration
+    /// Start calorie tracking with enhanced HealthKit integration
     private func startCalorieTracking(bodyWeight: Double, loadWeight: Double) {
+        Task {
+            // Use HealthKit-enabled parameters creation if available
+            let parameters = await calorieCalculator.createParametersWithHealthKit(
+                bodyWeight: nil, // Let it use HealthKit data
+                loadWeight: loadWeight,
+                speed: 1.0, // Will be updated with actual speed
+                grade: 0.0, // Will be updated with actual grade
+                temperature: 20.0, // Will be updated with weather data
+                altitude: currentLocation?.altitude ?? 0.0,
+                windSpeed: 0.0,
+                terrainMultiplier: 1.0 // Will be updated with terrain data
+            )
+            
+            await startContinuousCalculationWithParameters(parameters)
+        }
+        
+        // Start terrain factor monitoring for real-time updates
+        startTerrainFactorMonitoring()
+    }
+    
+    /// Start continuous calorie calculation with given parameters
+    private func startContinuousCalculationWithParameters(_ initialParameters: CalorieCalculationParameters) async {
+        // This will be called periodically to update calorie calculations
         calorieCalculator.startContinuousCalculation(
-            bodyWeight: bodyWeight,
-            loadWeight: loadWeight,
+            bodyWeight: initialParameters.bodyWeight,
+            loadWeight: initialParameters.loadWeight,
             locationProvider: { @MainActor [weak self] in
                 guard let self = self else { 
                     return (location: nil, grade: nil, terrain: nil)
@@ -659,9 +718,6 @@ final class LocationTrackingManager: NSObject {
                 return await self.terrainDetectionManager.getEnhancedTerrainFactor(grade: grade)
             }
         )
-        
-        // Start terrain factor monitoring for real-time updates
-        startTerrainFactorMonitoring()
     }
     
     /// Starts monitoring terrain factor changes for real-time calorie updates

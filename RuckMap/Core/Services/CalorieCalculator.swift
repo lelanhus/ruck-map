@@ -177,6 +177,13 @@ final class CalorieCalculator {
     private(set) var lastCalculationResult: CalorieCalculationResult?
     private(set) var isCalculating: Bool = false
     
+    // MARK: - HealthKit Integration
+    private weak var healthKitManager: HealthKitManager?
+    private var cachedBodyWeight: Double? // kg
+    private var cachedHeight: Double? // meters
+    private var lastBodyMetricsCheck: Date?
+    private let bodyMetricsCacheInterval: TimeInterval = 3600 // 1 hour
+    
     // MARK: - Private Properties
     private var calculationHistory: [CalorieCalculationResult] = []
     private let maxHistorySize: Int = 1000
@@ -207,12 +214,91 @@ final class CalorieCalculator {
     ]
     
     // MARK: - Initialization
-    init() {
-        // Initialize with default values
+    init(healthKitManager: HealthKitManager? = nil) {
+        self.healthKitManager = healthKitManager
+        
+        // Set up HealthKit callbacks if available
+        setupHealthKitCallbacks()
+    }
+    
+    private func setupHealthKitCallbacks() {
+        healthKitManager?.onBodyMetricsUpdate = { [weak self] weight, height in
+            Task { @MainActor in
+                self?.cachedBodyWeight = weight
+                self?.cachedHeight = height
+                self?.lastBodyMetricsCheck = Date()
+            }
+        }
     }
     
     
     // MARK: - Public Interface
+    
+    /// Creates calculation parameters with HealthKit body weight if available
+    /// - Parameters:
+    ///   - bodyWeight: Manual body weight (kg). If nil, will attempt to use HealthKit data
+    ///   - loadWeight: Pack weight (kg)
+    ///   - speed: Movement speed (m/s)
+    ///   - grade: Terrain grade (percentage)
+    ///   - temperature: Temperature (Celsius)
+    ///   - altitude: Altitude (meters)
+    ///   - windSpeed: Wind speed (m/s)
+    ///   - terrainMultiplier: Terrain difficulty multiplier
+    ///   - timestamp: Calculation timestamp
+    /// - Returns: Calculation parameters with body weight from HealthKit if available
+    func createParametersWithHealthKit(
+        bodyWeight: Double? = nil,
+        loadWeight: Double,
+        speed: Double,
+        grade: Double = 0.0,
+        temperature: Double = 20.0,
+        altitude: Double = 0.0,
+        windSpeed: Double = 0.0,
+        terrainMultiplier: Double = 1.0,
+        timestamp: Date = Date()
+    ) async -> CalorieCalculationParameters {
+        let effectiveBodyWeight = await getEffectiveBodyWeight(manualWeight: bodyWeight)
+        
+        return CalorieCalculationParameters(
+            bodyWeight: effectiveBodyWeight,
+            loadWeight: loadWeight,
+            speed: speed,
+            grade: grade,
+            temperature: temperature,
+            altitude: altitude,
+            windSpeed: windSpeed,
+            terrainMultiplier: terrainMultiplier,
+            timestamp: timestamp
+        )
+    }
+    
+    /// Gets effective body weight, preferring HealthKit data when available
+    private func getEffectiveBodyWeight(manualWeight: Double?) async -> Double {
+        // Use manual weight if provided
+        if let manualWeight = manualWeight {
+            return manualWeight
+        }
+        
+        // Check if we need to refresh HealthKit data
+        let shouldRefresh = lastBodyMetricsCheck == nil || 
+                           Date().timeIntervalSince(lastBodyMetricsCheck!) > bodyMetricsCacheInterval
+        
+        if shouldRefresh, let healthKitManager = healthKitManager, healthKitManager.isAuthorized {
+            do {
+                let (weight, _) = try await healthKitManager.loadBodyMetrics()
+                if let weight = weight {
+                    cachedBodyWeight = weight
+                    lastBodyMetricsCheck = Date()
+                    return weight
+                }
+            } catch {
+                // Fall back to cached or default weight
+            }
+        }
+        
+        // Use cached weight if available, otherwise default
+        return cachedBodyWeight ?? 70.0 // Default 70kg if no data available
+    }
     
     /// Calculates calorie burn rate and updates total calories
     /// - Parameter parameters: Environmental and physiological parameters
