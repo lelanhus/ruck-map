@@ -345,5 +345,5 @@ private func formatPace(_ pace: Double) -> String {
 
 #Preview {
     HistoryView()
-        .environmentObject(WatchAppCoordinator())
+        .environment(WatchAppCoordinator())
 }

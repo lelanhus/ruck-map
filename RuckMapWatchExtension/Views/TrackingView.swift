@@ -378,5 +378,5 @@ private func formatDuration(_ duration: TimeInterval) -> String {
 
 #Preview {
     TrackingView()
-        .environmentObject(WatchAppCoordinator())
+        .environment(WatchAppCoordinator())
 }

@@ -415,5 +415,5 @@ struct FeatureRow: View {
 
 #Preview {
     SettingsView()
-        .environmentObject(WatchAppCoordinator())
+        .environment(WatchAppCoordinator())
 }
