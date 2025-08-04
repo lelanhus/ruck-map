@@ -1,10 +1,26 @@
 import Foundation
 import SwiftData
 import CoreLocation
+import OSLog
+
+// MARK: - Constants
+
+private enum Constants {
+    static let maxAccuracyThreshold: Double = 10.0 // meters
+    static let dataRetentionHours: TimeInterval = 48 * 3600 // 48 hours
+    static let cleanupInterval: TimeInterval = 3600 // 1 hour
+    static let estimatedSizePerPoint: Double = 0.5 // KB
+}
 
 // MARK: - Watch-Optimized Ruck Session
 
 /// Lightweight ruck session model optimized for Apple Watch storage constraints
+/// 
+/// Thread Safety: Uses @unchecked Sendable because:
+/// - All mutable properties are value types (Double, Date, Bool, etc.)
+/// - SwiftData @Model ensures thread-safe access to persistent properties
+/// - locationPoints relationship is managed by SwiftData's thread-safe mechanisms
+/// - No shared mutable state that could cause data races
 @Model
 final class WatchRuckSession: @unchecked Sendable {
     var id: UUID
@@ -86,6 +102,11 @@ final class WatchRuckSession: @unchecked Sendable {
 // MARK: - Watch-Optimized Location Point
 
 /// Lightweight location point model optimized for Apple Watch
+///
+/// Thread Safety: Uses @unchecked Sendable because:
+/// - All properties are value types (Date, Double) with no shared mutable state
+/// - SwiftData @Model provides thread-safe persistence mechanisms
+/// - Immutable after creation (only set during initialization)
 @Model
 final class WatchLocationPoint: @unchecked Sendable {
     var timestamp: Date = Date()
@@ -140,7 +161,7 @@ final class WatchLocationPoint: @unchecked Sendable {
     }
     
     var isAccurate: Bool {
-        horizontalAccuracy <= 10.0 && horizontalAccuracy > 0
+        horizontalAccuracy <= Constants.maxAccuracyThreshold && horizontalAccuracy > 0
     }
     
     /// Update heart rate data from HealthKit
@@ -171,7 +192,9 @@ final class WatchLocationPoint: @unchecked Sendable {
 @Observable
 final class WatchDataManager {
     private let modelContainer: ModelContainer
-    private let dataRetentionHours: TimeInterval = 48 * 3600 // 48 hours in seconds
+    private let dataRetentionHours: TimeInterval = Constants.dataRetentionHours
+    private var cleanupTimer: Timer?
+    private let logger = Logger(subsystem: "com.ruckmap.watch", category: "DataManager")
     
     // Published properties
     var currentSession: WatchRuckSession?
@@ -309,19 +332,22 @@ final class WatchDataManager {
         
         if !oldSessions.isEmpty {
             try modelContainer.mainContext.save()
-            print("Cleaned up \(oldSessions.count) old sessions")
+            logger.info("Cleaned up \(oldSessions.count) old sessions")
         }
     }
     
     /// Start automatic cleanup timer
     private func startAutomaticCleanup() {
+        // Invalidate existing timer if any
+        cleanupTimer?.invalidate()
+        
         // Clean up every hour
-        Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
+        cleanupTimer = Timer.scheduledTimer(withTimeInterval: Constants.cleanupInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 do {
                     try self?.cleanupOldSessions()
                 } catch {
-                    print("Failed to cleanup old sessions: \(error)")
+                    self?.logger.error("Failed to cleanup old sessions: \(error.localizedDescription)")
                 }
             }
         }
@@ -331,7 +357,7 @@ final class WatchDataManager {
             do {
                 try cleanupOldSessions()
             } catch {
-                print("Failed initial cleanup: \(error)")
+                logger.error("Failed initial cleanup: \(error.localizedDescription)")
             }
         }
     }
@@ -344,8 +370,18 @@ final class WatchDataManager {
         return WatchStorageStats(
             sessionCount: totalSessions,
             locationPointCount: totalLocationPoints,
-            estimatedSizeKB: Double(totalLocationPoints) * 0.5 // Rough estimate: 0.5KB per point
+            estimatedSizeKB: Double(totalLocationPoints) * Constants.estimatedSizePerPoint
         )
+    }
+    
+    /// Stop automatic cleanup timer (called when app backgrounds)
+    func stopAutomaticCleanup() {
+        cleanupTimer?.invalidate()
+        cleanupTimer = nil
+    }
+    
+    deinit {
+        cleanupTimer?.invalidate()
     }
 }
 

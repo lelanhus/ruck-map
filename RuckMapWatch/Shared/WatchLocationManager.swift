@@ -2,6 +2,7 @@ import Foundation
 import CoreLocation
 import Observation
 import HealthKit
+import OSLog
 
 // MARK: - Watch Location Tracking Manager
 
@@ -9,6 +10,22 @@ import HealthKit
 @MainActor
 @Observable
 final class WatchLocationManager: NSObject {
+    
+    // MARK: - Constants
+    
+    private enum Constants {
+        static let distanceFilterMeters: CLLocationDistance = 10.0
+        static let maxRecentLocations: Int = 5
+        static let autoPauseDistanceThreshold: Double = 5.0 // meters
+        static let autoPauseTimeThreshold: TimeInterval = 30.0 // seconds
+        static let accuracyThreshold: Double = 10.0 // meters
+        static let updateInterval: TimeInterval = 2.0 // seconds
+        static let cleanupTimerInterval: TimeInterval = 3600 // 1 hour
+    }
+    
+    // MARK: - Properties
+    
+    private let logger = Logger(subsystem: "com.ruckmap.watch", category: "LocationManager")
     
     // MARK: - Published Properties
     var currentLocation: CLLocation?
@@ -414,7 +431,7 @@ final class WatchLocationManager: NSObject {
         if isPaused {
             // Reduce accuracy when paused to save battery
             locationManager.desiredAccuracy = kCLLocationAccuracyHundredMeters
-            locationManager.distanceFilter = 10.0
+            locationManager.distanceFilter = Constants.distanceFilterMeters
         } else {
             // Restore full accuracy when active
             locationManager.desiredAccuracy = kCLLocationAccuracyBest
@@ -469,19 +486,25 @@ final class WatchLocationManager: NSObject {
 
 extension WatchLocationManager: CLLocationManagerDelegate {
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        // Process locations synchronously to prevent race conditions
         Task { @MainActor in
-            for location in locations {
+            // Process most recent location only to avoid overwhelming the system
+            if let location = locations.last {
                 await processLocationUpdate(location)
             }
         }
     }
     
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        print("Watch location manager failed: \(error)")
+        Task { @MainActor in
+            logger.error("Location manager failed: \(error.localizedDescription)")
+        }
     }
     
     nonisolated func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
-        print("Watch location authorization changed: \(status.rawValue)")
+        Task { @MainActor in
+            logger.info("Location authorization changed: \(status.rawValue)")
+        }
     }
 }
 

@@ -98,16 +98,7 @@ final class WatchHealthKitManager {
     
     private func loadMostRecentBodyMass() async throws -> Double? {
         let bodyMassType = HKQuantityType.quantityType(forIdentifier: .bodyMass)!
-        
         let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
-        let query = HKSampleQuery(
-            sampleType: bodyMassType,
-            predicate: nil,
-            limit: 1,
-            sortDescriptors: [sortDescriptor]
-        ) { _, samples, error in
-            // Query completion handled by continuation
-        }
         
         return try await withCheckedThrowingContinuation { continuation in
             let completionQuery = HKSampleQuery(
