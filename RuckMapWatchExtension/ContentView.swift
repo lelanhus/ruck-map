@@ -69,7 +69,7 @@ struct LoadingView: View {
 
 struct ErrorView: View {
     let error: Error
-    @EnvironmentObject var appCoordinator: WatchAppCoordinator
+    @Environment(WatchAppCoordinator.self) var appCoordinator
     
     var body: some View {
         VStack(spacing: 12) {
@@ -99,5 +99,5 @@ struct ErrorView: View {
 
 #Preview {
     ContentView()
-        .environmentObject(WatchAppCoordinator())
+        .environment(WatchAppCoordinator())
 }
