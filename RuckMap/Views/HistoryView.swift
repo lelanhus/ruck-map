@@ -66,8 +66,18 @@ struct HistoryView: View {
     }
 }
 
+// MARK: - Preview Helpers
+
+private func createPreviewDataCoordinator() -> DataCoordinator {
+    do {
+        return try DataCoordinator()
+    } catch {
+        fatalError("Failed to create preview DataCoordinator: \(error)")
+    }
+}
+
 #Preview {
     HistoryView()
         .modelContainer(for: RuckSession.self, inMemory: true)
-        .environmentObject(try! DataCoordinator())
+        .environmentObject(createPreviewDataCoordinator())
 }

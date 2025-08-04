@@ -366,26 +366,31 @@ struct ProgressOverlay: View {
 }
 
 #Preview {
-    let session = try! RuckSession(loadWeight: 35.0)
-    session.totalDistance = 5000
-    session.elevationGain = 250
-    session.totalCalories = 750
-    
-    // Add some sample location points
-    for i in 0..<10 {
-        let point = LocationPoint(
-            timestamp: Date(),
-            latitude: 40.7128 + Double(i) * 0.001,
-            longitude: -74.0060,
-            altitude: 10.0,
-            horizontalAccuracy: 5.0,
-            verticalAccuracy: 3.0,
-            speed: 1.5,
-            course: 0.0
-        )
-        session.locationPoints.append(point)
+    do {
+        let session = try RuckSession(loadWeight: 35.0)
+        session.totalDistance = 5000
+        session.elevationGain = 250
+        session.totalCalories = 750
+        
+        // Add some sample location points
+        for i in 0..<10 {
+            let point = LocationPoint(
+                timestamp: Date(),
+                latitude: 40.7128 + Double(i) * 0.001,
+                longitude: -74.0060,
+                altitude: 10.0,
+                horizontalAccuracy: 5.0,
+                verticalAccuracy: 3.0,
+                speed: 1.5,
+                course: 0.0
+            )
+            session.locationPoints.append(point)
+        }
+        
+        let coordinator = try DataCoordinator()
+        return SessionExportView(session: session)
+            .environmentObject(coordinator)
+    } catch {
+        return Text("Preview unavailable: \(error.localizedDescription)")
     }
-    
-    return SessionExportView(session: session)
-        .environmentObject(try! DataCoordinator())
 }

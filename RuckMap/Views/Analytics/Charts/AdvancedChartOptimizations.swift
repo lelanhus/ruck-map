@@ -261,21 +261,21 @@ struct RealTimeSessionChart: View {
 /// Memory-efficient circular buffer for streaming chart data
 class CircularBuffer<T>: ObservableObject {
     @Published private(set) var items: [T] = []
+    private var buffer: [T?]
     private let capacity: Int
     private var head = 0
     private var count = 0
     
     init(capacity: Int) {
         self.capacity = capacity
-        self.items = Array(repeating: Optional<T>.none as! T, count: capacity)
+        self.buffer = Array(repeating: nil, count: capacity)
     }
     
     func append(_ item: T) {
+        buffer[head] = item
+        
         if count < capacity {
-            items[head] = item
             count += 1
-        } else {
-            items[head] = item
         }
         
         head = (head + 1) % capacity
@@ -285,16 +285,30 @@ class CircularBuffer<T>: ObservableObject {
     }
     
     private func updatePublishedItems() {
+        var orderedItems: [T] = []
+        
         if count < capacity {
-            items = Array(items.prefix(count))
+            // Buffer not full, collect items in order
+            for i in 0..<count {
+                if let item = buffer[i] {
+                    orderedItems.append(item)
+                }
+            }
         } else {
-            // Reorder items to maintain chronological order
-            let orderedItems = Array(items[head...]) + Array(items[..<head])
-            items = orderedItems
+            // Buffer is full, reorder to maintain chronological order
+            for i in 0..<capacity {
+                let index = (head + i) % capacity
+                if let item = buffer[index] {
+                    orderedItems.append(item)
+                }
+            }
         }
+        
+        items = orderedItems
     }
     
     func clear() {
+        buffer = Array(repeating: nil, count: capacity)
         items.removeAll()
         head = 0
         count = 0
@@ -529,8 +543,9 @@ struct ChartPerformanceMonitor {
         renderTimes[chartName, default: []].append(time)
         
         // Keep only last 10 measurements
-        if renderTimes[chartName]!.count > 10 {
-            renderTimes[chartName]!.removeFirst()
+        if var times = renderTimes[chartName], times.count > 10 {
+            times.removeFirst()
+            renderTimes[chartName] = times
         }
     }
     

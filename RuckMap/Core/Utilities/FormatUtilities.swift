@@ -16,6 +16,9 @@ enum FormatUtilities {
         /// Meters to miles conversion factor
         static let metersToMiles = 1609.34
         
+        /// Meters to feet conversion factor
+        static let metersToFeet = 3.28084
+        
         /// Meters to kilometers conversion factor
         static let metersToKilometers = 1000.0
     }
@@ -157,7 +160,7 @@ enum FormatUtilities {
     /// - Returns: Formatted elevation string
     static func formatElevation(_ meters: Double, units: String = "imperial") -> String {
         if units == "imperial" {
-            let feet = meters * 3.28084
+            let feet = meters * ConversionConstants.metersToFeet
             return "\(Int(feet)) ft"
         }
         return "\(Int(meters)) m"

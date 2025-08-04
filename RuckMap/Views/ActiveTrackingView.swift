@@ -73,7 +73,7 @@ struct ActiveTrackingView: View {
     }
 
     private var formattedDistance: String {
-        let miles = locationManager.totalDistance / 1609.34
+        let miles = locationManager.totalDistance / FormatUtilities.ConversionConstants.metersToMiles
         return String(format: "%.2f mi", miles)
     }
 
@@ -111,12 +111,12 @@ struct ActiveTrackingView: View {
     }
 
     private var formattedElevationGain: String {
-        let feet = totalElevationGain * 3.28084
+        let feet = totalElevationGain * FormatUtilities.ConversionConstants.metersToFeet
         return String(format: "%.0f ft", feet)
     }
 
     private var formattedElevationLoss: String {
-        let feet = totalElevationLoss * 3.28084
+        let feet = totalElevationLoss * FormatUtilities.ConversionConstants.metersToFeet
         return String(format: "%.0f ft", feet)
     }
 
@@ -823,7 +823,7 @@ struct LoadWeightCard: View {
                 }
             }
 
-            Text(String(format: "%.0f lbs", currentWeight * 2.20462))
+            Text(String(format: "%.0f lbs", currentWeight * FormatUtilities.ConversionConstants.kilogramsToPounds))
                 .font(.system(size: 36, weight: .bold, design: .rounded))
                 .foregroundColor(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -865,7 +865,7 @@ struct LoadWeightAdjustmentView: View {
                 }
 
                 VStack(spacing: 16) {
-                    Text(String(format: "%.0f lbs", weight * 2.20462))
+                    Text(String(format: "%.0f lbs", weight * FormatUtilities.ConversionConstants.kilogramsToPounds))
                         .font(.system(size: 48, weight: .bold, design: .rounded))
                         .foregroundColor(.purple)
 

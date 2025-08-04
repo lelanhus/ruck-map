@@ -284,8 +284,8 @@ struct FilterSheetView: View {
     
     private func formatWeightRange() -> String {
         if preferredUnits == "imperial" {
-            let lowerLbs = viewModel.loadWeightRange.lowerBound * 2.20462
-            let upperLbs = viewModel.loadWeightRange.upperBound * 2.20462
+            let lowerLbs = viewModel.loadWeightRange.lowerBound * FormatUtilities.ConversionConstants.kilogramsToPounds
+            let upperLbs = viewModel.loadWeightRange.upperBound * FormatUtilities.ConversionConstants.kilogramsToPounds
             return String(format: "%.0f - %.0f lbs", lowerLbs, upperLbs)
         } else {
             return String(format: "%.0f - %.0f kg", viewModel.loadWeightRange.lowerBound, viewModel.loadWeightRange.upperBound)

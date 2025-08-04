@@ -3,7 +3,7 @@ import SwiftData
 import CoreLocation
 
 @Model
-final class LocationPoint {
+final class LocationPoint: @unchecked Sendable {
     var timestamp: Date = Date()
     var latitude: Double = 0.0
     var longitude: Double = 0.0

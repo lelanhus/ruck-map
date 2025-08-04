@@ -71,7 +71,7 @@ enum TerrainType: String, CaseIterable, Codable, Sendable {
 }
 
 @Model
-final class TerrainSegment {
+final class TerrainSegment: @unchecked Sendable {
     var startTime: Date = Date()
     var endTime: Date = Date()
     var terrainTypeRaw: String = "paved_road"

@@ -292,7 +292,7 @@ struct PersonalRecordsChart: View {
             .chartAccessibility(
                 label: "Personal records chart",
                 hint: "Shows personal records compared to averages. Double tap to select records, triple tap for audio graph.",
-                value: selectedRecord != nil ? "Selected: \(selectedRecord!.displayName)" : "No record selected",
+                value: selectedRecord.map { "Selected: \($0.displayName)" } ?? "No record selected",
                 traits: [.allowsDirectInteraction, .playsSound],
                 actions: [
                     .playAudioGraph: {
@@ -390,9 +390,13 @@ struct PersonalRecordsChart: View {
         }
         
         let summary = "Personal records chart shows \(validRecords.count) record categories. "
-        let bestImprovement = validRecords.max { $0.improvementRatio < $1.improvementRatio }!
         
-        let summaryText = summary + "Best performance: \(bestImprovement.type.displayName) at \(bestImprovement.improvementRatio, format: .number.precision(.fractionLength(1))) times average."
+        let summaryText: String
+        if let bestImprovement = validRecords.max(by: { $0.improvementRatio < $1.improvementRatio }) {
+            summaryText = summary + "Best performance: \(bestImprovement.type.displayName) at \(bestImprovement.improvementRatio, format: .number.precision(.fractionLength(1))) times average."
+        } else {
+            summaryText = summary + "No records available for comparison."
+        }
         
         accessibilityManager.announceMessage(summaryText)
         
