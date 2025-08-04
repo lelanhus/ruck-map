@@ -4,6 +4,7 @@ import CoreMotion
 import SwiftData
 import Observation
 import UIKit
+import OSLog
 
 /// Legacy location tracking manager - being replaced by actor-based architecture
 /// 
@@ -13,8 +14,8 @@ import UIKit
 /// 
 /// - SeeAlso: LocationTrackingFacade, LocationCore, LocationProcessor, MetricsCalculator
 @available(*, deprecated, message: "Use LocationTrackingFacade instead for new code. This class will be removed in a future version.")
-// MARK: - Tracking State
-enum TrackingState: String, CaseIterable, Sendable {
+// MARK: - Legacy Tracking State
+enum LegacyTrackingState: String, CaseIterable, Sendable {
     case stopped
     case tracking
     case paused
@@ -64,9 +65,12 @@ enum GPSAccuracy: String, CaseIterable {
 @MainActor
 @available(*, deprecated, message: "Use LocationTrackingFacade instead for new code. This class will be removed in a future version.")
 final class LocationTrackingManager: NSObject {
+    // MARK: - Private Properties
+    private let logger = Logger(subsystem: "com.ruckmap.app", category: "LocationTrackingManager")
+    
     // MARK: - Published Properties
     var currentLocation: CLLocation?
-    var trackingState: TrackingState = .stopped
+    var trackingState: LegacyTrackingState = .stopped
     var gpsAccuracy: GPSAccuracy = .poor
     var currentSession: RuckSession?
     
