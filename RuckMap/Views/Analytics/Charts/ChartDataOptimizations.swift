@@ -200,28 +200,30 @@ class OptimizedChartData<T: ChartDataPoint & Equatable & Sendable>: ObservableOb
     isOptimizing = true
     
     // Perform optimization on background thread
+    let strategy = optimizationStrategy
+    let maxPoints = maxDisplayPoints
     let optimizedData = await Task.detached {
-      return self.optimizeData(newData)
+      return Self.optimizeData(newData, strategy: strategy, maxPoints: maxPoints)
     }.value
     
     displayData = optimizedData
     isOptimizing = false
   }
   
-  private func optimizeData(_ data: [T]) -> [T] {
-    switch optimizationStrategy {
+  private static func optimizeData(_ data: [T], strategy: OptimizationStrategy, maxPoints: Int) -> [T] {
+    switch strategy {
     case .uniform:
-      return ChartDataSampler.sampleBarData(data, maxPoints: maxDisplayPoints)
+      return ChartDataSampler.sampleBarData(data, maxPoints: maxPoints)
     case .douglasPeucker:
-      return ChartDataSampler.sampleLineData(data, maxPoints: maxDisplayPoints)
+      return ChartDataSampler.sampleLineData(data, maxPoints: maxPoints)
     case .peakDetection:
-      return ChartDataSampler.sampleWithPeakDetection(data, maxPoints: maxDisplayPoints)
+      return ChartDataSampler.sampleWithPeakDetection(data, maxPoints: maxPoints)
     case .adaptive:
-      return adaptiveOptimization(data)
+      return adaptiveOptimization(data, maxPoints: maxPoints)
     }
   }
   
-  private func adaptiveOptimization(_ data: [T]) -> [T] {
+  private static func adaptiveOptimization(_ data: [T], maxPoints: Int) -> [T] {
     // Choose optimization strategy based on data characteristics
     let values = data.map { $0.chartValue }
     let variance = calculateVariance(values)
@@ -229,17 +231,17 @@ class OptimizedChartData<T: ChartDataPoint & Equatable & Sendable>: ObservableOb
     
     if variance > trend * 2 {
       // High variance data benefits from peak detection
-      return ChartDataSampler.sampleWithPeakDetection(data, maxPoints: maxDisplayPoints)
+      return ChartDataSampler.sampleWithPeakDetection(data, maxPoints: maxPoints)
     } else if trend > variance {
       // Trending data benefits from Douglas-Peucker
-      return ChartDataSampler.sampleLineData(data, maxPoints: maxDisplayPoints)
+      return ChartDataSampler.sampleLineData(data, maxPoints: maxPoints)
     } else {
       // Stable data can use uniform sampling
-      return ChartDataSampler.sampleBarData(data, maxPoints: maxDisplayPoints)
+      return ChartDataSampler.sampleBarData(data, maxPoints: maxPoints)
     }
   }
   
-  private func calculateVariance(_ values: [Double]) -> Double {
+  private static func calculateVariance(_ values: [Double]) -> Double {
     guard !values.isEmpty else { return 0 }
     
     let mean = values.reduce(0, +) / Double(values.count)
@@ -247,7 +249,7 @@ class OptimizedChartData<T: ChartDataPoint & Equatable & Sendable>: ObservableOb
     return variance
   }
   
-  private func calculateTrend(_ values: [Double]) -> Double {
+  private static func calculateTrend(_ values: [Double]) -> Double {
     guard values.count > 1 else { return 0 }
     
     let n = Double(values.count)
