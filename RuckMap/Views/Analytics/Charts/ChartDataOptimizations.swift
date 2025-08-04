@@ -13,7 +13,7 @@ struct ChartDataSampler {
   static let maxDataPoints = 100
   
   /// Samples data points using Douglas-Peucker algorithm for line charts
-  static func sampleLineData<T: ChartDataPoint>(_ data: [T], maxPoints: Int = maxDataPoints) -> [T] {
+  static func sampleLineData<T: ChartDataPoint & Sendable>(_ data: [T], maxPoints: Int = maxDataPoints) -> [T] {
     guard data.count > maxPoints else { return data }
     
     // Use Douglas-Peucker algorithm for optimal line simplification
@@ -21,7 +21,7 @@ struct ChartDataSampler {
   }
   
   /// Samples data points using uniform sampling for bar charts
-  static func sampleBarData<T: ChartDataPoint>(_ data: [T], maxPoints: Int = maxDataPoints) -> [T] {
+  static func sampleBarData<T: ChartDataPoint & Sendable>(_ data: [T], maxPoints: Int = maxDataPoints) -> [T] {
     guard data.count > maxPoints else { return data }
     
     let step = Double(data.count) / Double(maxPoints)
@@ -38,7 +38,7 @@ struct ChartDataSampler {
   }
   
   /// Samples data points using peak detection for preserving important features
-  static func sampleWithPeakDetection<T: ChartDataPoint>(_ data: [T], maxPoints: Int = maxDataPoints) -> [T] {
+  static func sampleWithPeakDetection<T: ChartDataPoint & Sendable>(_ data: [T], maxPoints: Int = maxDataPoints) -> [T] {
     guard data.count > maxPoints else { return data }
     
     var importantPoints: Set<Int> = []
@@ -84,7 +84,7 @@ struct ChartDataSampler {
   
   // MARK: - Private Helper Methods
   
-  private static func douglasPeucker<T: ChartDataPoint>(_ data: [T], epsilon: Double, maxPoints: Int) -> [T] {
+  private static func douglasPeucker<T: ChartDataPoint & Sendable>(_ data: [T], epsilon: Double, maxPoints: Int) -> [T] {
     guard data.count > 2 else { return data }
     
     var result: [T] = []
@@ -100,7 +100,7 @@ struct ChartDataSampler {
     return result.sorted { $0.chartDate < $1.chartDate }
   }
   
-  private static func douglasPeuckerRecursive<T: ChartDataPoint>(_ data: [T], epsilon: Double, start: Int, end: Int, result: inout [T]) {
+  private static func douglasPeuckerRecursive<T: ChartDataPoint & Sendable>(_ data: [T], epsilon: Double, start: Int, end: Int, result: inout [T]) {
     if end - start < 2 {
       result.append(data[start])
       if start != end {
@@ -129,7 +129,7 @@ struct ChartDataSampler {
     }
   }
   
-  private static func perpendicularDistance<T: ChartDataPoint>(_ point: T, lineStart: T, lineEnd: T) -> Double {
+  private static func perpendicularDistance<T: ChartDataPoint & Sendable>(_ point: T, lineStart: T, lineEnd: T) -> Double {
     let x0 = point.chartValue
     let y0 = point.chartDate.timeIntervalSince1970
     let x1 = lineStart.chartValue
@@ -143,7 +143,7 @@ struct ChartDataSampler {
     return denominator == 0 ? 0 : numerator / denominator
   }
   
-  private static func calculateOptimalEpsilon<T: ChartDataPoint>(_ data: [T]) -> Double {
+  private static func calculateOptimalEpsilon<T: ChartDataPoint & Sendable>(_ data: [T]) -> Double {
     let values = data.map { $0.chartValue }
     let minValue = values.min() ?? 0
     let maxValue = values.max() ?? 0
@@ -165,7 +165,7 @@ protocol ChartDataPoint {
 // MARK: - Memory-Efficient Chart Data Container
 
 /// Memory-efficient container for chart data with automatic optimization
-class OptimizedChartData<T: ChartDataPoint>: ObservableObject {
+class OptimizedChartData<T: ChartDataPoint & Equatable & Sendable>: ObservableObject {
   @Published private(set) var displayData: [T] = []
   @Published private(set) var isOptimizing = false
   
@@ -268,6 +268,8 @@ class OptimizedChartData<T: ChartDataPoint>: ObservableObject {
 // MARK: - Chart Performance Monitor
 
 /// Performance monitoring for chart rendering
+// Duplicate - using version from AdvancedChartOptimizations.swift
+/*
 class ChartPerformanceMonitor: ObservableObject {
   @Published private(set) var averageRenderTime: TimeInterval = 0
   @Published private(set) var lastRenderTime: TimeInterval = 0
@@ -329,6 +331,7 @@ extension WeekData: ChartDataPoint {
 struct ChartAnimationProvider {
   
   /// Returns appropriate animation for chart updates
+  @MainActor
   static func chartUpdateAnimation() -> Animation? {
     if AccessibilityPreferences.shared.reduceMotion {
       return nil
@@ -338,6 +341,7 @@ struct ChartAnimationProvider {
   }
   
   /// Returns appropriate animation for chart selection
+  @MainActor
   static func selectionAnimation() -> Animation? {
     if AccessibilityPreferences.shared.reduceMotion {
       return nil
@@ -347,6 +351,7 @@ struct ChartAnimationProvider {
   }
   
   /// Returns appropriate animation for chart appearance
+  @MainActor
   static func appearanceAnimation() -> Animation? {
     if AccessibilityPreferences.shared.reduceMotion {
       return nil
@@ -359,6 +364,10 @@ struct ChartAnimationProvider {
 // MARK: - Accessibility Preferences Helper
 
 /// Helper for accessing accessibility preferences
+*/
+
+// Duplicate - using version from AccessibilityEnhancements.swift  
+/*
 struct AccessibilityPreferences {
   static let shared = AccessibilityPreferences()
   
@@ -374,3 +383,4 @@ struct AccessibilityPreferences {
     UIAccessibility.isReduceTransparencyEnabled
   }
 }
+*/
