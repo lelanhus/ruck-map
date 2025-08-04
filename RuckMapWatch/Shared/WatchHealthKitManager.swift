@@ -267,13 +267,13 @@ final class WatchHealthKitManager {
     }
     
     /// Add sample data to the workout
-    func addSampleToWorkout(_ sample: HKSample) async {
+    func addSampleToWorkout(_ sample: HKSample) {
         guard let builder = workoutBuilder else { return }
         
-        do {
-            try await builder.add([sample])
-        } catch {
-            print("Failed to add sample to workout: \(error)")
+        builder.add([sample]) { (success, error) in
+            if let error = error {
+                print("Failed to add sample to workout: \(error)")
+            }
         }
     }
     

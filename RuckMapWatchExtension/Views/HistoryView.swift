@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct HistoryView: View {
-    @EnvironmentObject var appCoordinator: WatchAppCoordinator
+    @Environment(WatchAppCoordinator.self) var appCoordinator
     @State private var showingSessionDetail: WatchRuckSession?
     
     private var dataManager: WatchDataManager? {

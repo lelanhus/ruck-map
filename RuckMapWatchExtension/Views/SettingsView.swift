@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @EnvironmentObject var appCoordinator: WatchAppCoordinator
+    @Environment(WatchAppCoordinator.self) var appCoordinator
     @State private var showingPermissionsSheet = false
     @State private var showingStorageInfo = false
     @State private var showingAbout = false
@@ -145,7 +145,7 @@ struct SettingsView: View {
 // MARK: - Permissions View
 
 struct PermissionsView: View {
-    @EnvironmentObject var appCoordinator: WatchAppCoordinator
+    @Environment(WatchAppCoordinator.self) var appCoordinator
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -236,7 +236,7 @@ struct PermissionRow: View {
 // MARK: - Storage Info View
 
 struct StorageInfoView: View {
-    @EnvironmentObject var appCoordinator: WatchAppCoordinator
+    @Environment(WatchAppCoordinator.self) var appCoordinator
     @Environment(\.dismiss) private var dismiss
     
     private var storageStats: WatchStorageStats? {

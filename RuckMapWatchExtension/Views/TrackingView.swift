@@ -2,7 +2,7 @@ import SwiftUI
 import CoreLocation
 
 struct TrackingView: View {
-    @EnvironmentObject var appCoordinator: WatchAppCoordinator
+    @Environment(WatchAppCoordinator.self) var appCoordinator
     @State private var showingLoadWeightInput = false
     @State private var loadWeight: Double = 20.0 // Default 20kg
     @State private var showingConfirmStop = false
@@ -216,7 +216,7 @@ struct TrackingView: View {
     }
     
     private var gpsStatusText: String {
-        locationManager?.gpsAccuracy?.description ?? "No GPS"
+        locationManager?.gpsAccuracy.description ?? "No GPS"
     }
     
     // MARK: - Actions

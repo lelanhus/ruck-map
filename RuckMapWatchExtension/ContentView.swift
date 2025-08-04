@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @EnvironmentObject var appCoordinator: WatchAppCoordinator
+    @Environment(WatchAppCoordinator.self) var appCoordinator
     @State private var selectedTab = 0
     
     var body: some View {
@@ -23,7 +23,7 @@ struct ContentView: View {
 
 struct MainTabView: View {
     @Binding var selectedTab: Int
-    @EnvironmentObject var appCoordinator: WatchAppCoordinator
+    @Environment(WatchAppCoordinator.self) var appCoordinator
     
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -40,7 +40,7 @@ struct MainTabView: View {
                 .tag(2)
         }
         .tabViewStyle(.page)
-        .indexViewStyle(.page(backgroundDisplayMode: .always))
+        .indexViewStyle(.page(backgroundDisplayMode: .automatic))
     }
 }
 

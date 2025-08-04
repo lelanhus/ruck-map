@@ -96,8 +96,11 @@ final class WatchLocationManager: NSObject {
         locationManager.desiredAccuracy = kCLLocationAccuracyBest
         locationManager.distanceFilter = 3.0 // Larger filter for Watch
         locationManager.allowsBackgroundLocationUpdates = true
+        // These properties are not available on watchOS
+        #if !os(watchOS)
         locationManager.pausesLocationUpdatesAutomatically = false // We handle auto-pause
         locationManager.showsBackgroundLocationIndicator = false // Watch doesn't show indicator
+        #endif
     }
     
     private func setupHealthKitCallbacks() {

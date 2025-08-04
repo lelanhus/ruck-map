@@ -69,7 +69,7 @@ class ExtensionDelegate: NSObject, WKExtensionDelegate {
         
         WKExtension.shared().scheduleBackgroundRefresh(
             withPreferredDate: refreshDate,
-            userInfo: ["task": "cleanup"]
+            userInfo: ["task": "cleanup" as NSString]
         ) { error in
             if let error = error {
                 print("Failed to schedule background refresh: \(error)")

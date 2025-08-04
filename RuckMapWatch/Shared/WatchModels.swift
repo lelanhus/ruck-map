@@ -380,9 +380,8 @@ final class WatchDataManager {
         cleanupTimer = nil
     }
     
-    deinit {
-        cleanupTimer?.invalidate()
-    }
+    // Note: Timer cleanup is handled by stopAutomaticCleanup()
+    // Cannot access @MainActor properties from deinit
 }
 
 // MARK: - Supporting Types

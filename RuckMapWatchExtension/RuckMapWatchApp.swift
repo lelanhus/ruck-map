@@ -2,12 +2,12 @@ import SwiftUI
 
 @main
 struct RuckMapWatchApp: App {
-    @StateObject private var appCoordinator = WatchAppCoordinator()
+    @State private var appCoordinator = WatchAppCoordinator()
     
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environmentObject(appCoordinator)
+                .environment(appCoordinator)
                 .onAppear {
                     appCoordinator.initialize()
                 }
@@ -20,7 +20,7 @@ struct RuckMapWatchApp: App {
 /// Central coordinator for Watch app dependencies and state
 @MainActor
 @Observable
-final class WatchAppCoordinator: ObservableObject {
+final class WatchAppCoordinator {
     
     // Core managers
     private(set) var dataManager: WatchDataManager?
@@ -28,9 +28,9 @@ final class WatchAppCoordinator: ObservableObject {
     private(set) var healthKitManager: WatchHealthKitManager?
     
     // App state
-    @Published var isInitialized = false
-    @Published var initializationError: Error?
-    @Published var permissionsGranted = false
+    var isInitialized = false
+    var initializationError: Error?
+    var permissionsGranted = false
     
     func initialize() {
         Task {
