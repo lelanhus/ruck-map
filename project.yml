@@ -39,6 +39,9 @@ targets:
         enabled: true
       com.apple.developer.associated-domains:
         enabled: false
+    dependencies:
+      - target: RuckMapWatch
+        embed: true
     scheme:
       testTargets:
         - RuckMapTests
@@ -53,12 +56,13 @@ targets:
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       WATCHOS_DEPLOYMENT_TARGET: 10.0
       WATCHKIT_APP: YES
-      SKIP_INSTALL: YES
+      ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES: YES
     dependencies:
       - target: RuckMapWatchExtension
         embed: true
     scheme:
       testTargets: []
+      gatherCoverageData: false
   RuckMapWatchExtension:
     type: watchkit2-extension
     platform: watchOS
