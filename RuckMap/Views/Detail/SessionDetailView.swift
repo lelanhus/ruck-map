@@ -1085,7 +1085,7 @@ final class SessionDetailPresentation {
     var cameraPosition: MapCameraPosition = .automatic
     var mapBounds: MapCameraBounds?
     var currentMapStyle: MapStyle = .standard(elevation: .realistic)
-    var mapInteractionModes: MapInteractionModes = .all
+    var mapInteractionModes: MapKit.MapInteractionModes = .all
     
     var isFullScreen = false
     var showingActionSheet = false
@@ -1646,7 +1646,7 @@ final class SessionDetailPresentation {
     func toggleFullScreen() {
         withAnimation(.easeInOut(duration: 0.4)) {
             isFullScreen.toggle()
-            mapInteractionModes = isFullScreen ? .all : .basic
+            mapInteractionModes = isFullScreen ? MapKit.MapInteractionModes.all : MapKit.MapInteractionModes.basic
         }
     }
     

@@ -3,34 +3,6 @@ import MapKit
 import SwiftData
 import SwiftUI
 
-// Temporary MapView stub for build verification
-// TODO: Remove when MapView.swift is properly included in target
-struct MapView: View {
-    @State var locationManager: LocationTrackingManager
-    let showCurrentLocation: Bool
-    let followUser: Bool
-    let showTerrain: Bool
-    let interactionModes: MapInteractionModes
-    
-    var body: some View {
-        Map()
-            .overlay(
-                Text("Map Integration\n(Build Verification)")
-                    .font(.caption)
-                    .padding(8)
-                    .background(Color.black.opacity(0.7))
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
-                    .padding(),
-                alignment: .topTrailing
-            )
-    }
-}
-
-struct MapInteractionModes: OptionSet {
-    let rawValue: Int
-    static let all = MapInteractionModes(rawValue: 1)
-}
 
 struct ActiveTrackingView: View {
     @State var locationManager: LocationTrackingManager
@@ -545,7 +517,7 @@ struct ActiveTrackingView: View {
                 showCurrentLocation: true,
                 followUser: true,
                 showTerrain: true,
-                interactionModes: .all
+                interactionModes: MapKit.MapInteractionModes.all
             )
             
             // Floating metrics overlay on map

@@ -4,7 +4,7 @@ import HealthKit
 /// View for requesting and managing HealthKit permissions
 struct HealthKitPermissionsView: View {
     @Environment(\.dismiss) private var dismiss
-    @ObservedObject var healthKitManager: HealthKitManager
+    @Environment(HealthKitManager.self) var healthKitManager
     
     @State private var isRequestingPermissions = false
     @State private var showingError = false
@@ -305,5 +305,6 @@ struct PermissionBenefitRow: View {
 }
 
 #Preview {
-    HealthKitPermissionsView(healthKitManager: HealthKitManager())
+    HealthKitPermissionsView()
+        .environment(HealthKitManager())
 }

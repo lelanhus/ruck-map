@@ -647,7 +647,7 @@ extension DataCoordinator {
     
     /// Creates a session detail view
     func makeSessionDetailView(for session: RuckSession) -> some View {
-        SessionDetailView(session: session)
+        DetailedSessionView(session: session)
             .environmentObject(self)
             .modelContainer(modelContainer)
     }

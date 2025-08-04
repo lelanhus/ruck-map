@@ -47,7 +47,7 @@ struct MapView: View {
         showCurrentLocation: Bool = true,
         followUser: Bool = true,
         showTerrain: Bool = true,
-        interactionModes: MapInteractionModes = .all
+        interactionModes: MapKit.MapInteractionModes = .all
     ) {
         self.locationManager = locationManager
         self.showCurrentLocation = showCurrentLocation
@@ -820,7 +820,7 @@ struct MileMarker: View {
         followUser: true,
         showTerrain: true
     )
-    .preferredColorScheme(.light)
+    .preferredColorScheme(ColorScheme.light)
 }
 
 #Preview("MapView - Overview") {
@@ -831,7 +831,7 @@ struct MileMarker: View {
         showCurrentLocation: false,
         followUser: false,
         showTerrain: false,
-        interactionModes: .all
+        interactionModes: MapKit.MapInteractionModes.all
     )
-    .preferredColorScheme(.dark)
+    .preferredColorScheme(ColorScheme.dark)
 }
