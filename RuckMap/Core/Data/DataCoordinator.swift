@@ -14,6 +14,7 @@ class DataCoordinator: ObservableObject {
     private let sessionManager: SessionManager
     private let migrationManager: MigrationManager
     private let exportManager: ExportManager
+    let healthKitManager: HealthKitManager
     // Removed trackCompressor - compression handled by SessionManager
     
     // Published state
@@ -32,12 +33,14 @@ class DataCoordinator: ObservableObject {
         sessionManager: SessionManager,
         migrationManager: MigrationManager,
         exportManager: ExportManager,
+        healthKitManager: HealthKitManager,
         isFallback: Bool = false
     ) {
         self.modelContainer = modelContainer
         self.sessionManager = sessionManager
         self.migrationManager = migrationManager
         self.exportManager = exportManager
+        self.healthKitManager = healthKitManager
         
         if isFallback {
             logger.warning("DataCoordinator initialized in fallback mode with in-memory storage")
@@ -67,11 +70,13 @@ class DataCoordinator: ObservableObject {
             let sessionManager = SessionManager(modelContainer: modelContainer)
             let migrationManager = MigrationManager()
             let exportManager = ExportManager()
+            let healthKitManager = HealthKitManager()
             
             self.modelContainer = modelContainer
             self.sessionManager = sessionManager
             self.migrationManager = migrationManager
             self.exportManager = exportManager
+            self.healthKitManager = healthKitManager
             
             logger.info("DataCoordinator initialized successfully")
         } catch {
@@ -97,6 +102,7 @@ class DataCoordinator: ObservableObject {
                     self.sessionManager = SessionManager(modelContainer: modelContainer)
                     self.migrationManager = MigrationManager()
                     self.exportManager = ExportManager()
+                    self.healthKitManager = HealthKitManager()
                     
                     logger.info("DataCoordinator recovered successfully after migration failure")
                 } catch {
@@ -506,12 +512,14 @@ class DataCoordinator: ObservableObject {
             let sessionManager = SessionManager(modelContainer: modelContainer)
             let migrationManager = MigrationManager()
             let exportManager = ExportManager()
+            let healthKitManager = HealthKitManager()
             
             let coordinator = DataCoordinator(
                 modelContainer: modelContainer,
                 sessionManager: sessionManager,
                 migrationManager: migrationManager,
                 exportManager: exportManager,
+                healthKitManager: healthKitManager,
                 isFallback: true
             )
             
@@ -522,6 +530,89 @@ class DataCoordinator: ObservableObject {
             logger.critical("Failed to create fallback DataCoordinator: \(error.localizedDescription)")
             fatalError("Cannot create fallback DataCoordinator: \(error)")
         }
+    }
+    
+    // MARK: - HealthKit Integration
+    
+    /// Request HealthKit authorization
+    func requestHealthKitAuthorization() async throws {
+        try await healthKitManager.requestAuthorization()
+        logger.info("HealthKit authorization requested")
+    }
+    
+    /// Check HealthKit authorization status
+    func checkHealthKitStatus() {
+        healthKitManager.checkAuthorizationStatus()
+    }
+    
+    /// Load body metrics from HealthKit
+    func loadBodyMetrics() async throws -> (weight: Double?, height: Double?) {
+        return try await healthKitManager.loadBodyMetrics()
+    }
+    
+    /// Start heart rate monitoring for active session
+    func startHeartRateMonitoring() async throws {
+        try await healthKitManager.startHeartRateMonitoring()
+        logger.info("Heart rate monitoring started")
+    }
+    
+    /// Stop heart rate monitoring
+    func stopHeartRateMonitoring() {
+        healthKitManager.stopHeartRateMonitoring()
+        logger.info("Heart rate monitoring stopped")
+    }
+    
+    /// Complete session and save to HealthKit
+    func completeSessionWithHealthKit(
+        sessionId: UUID,
+        totalDistance: Double,
+        totalCalories: Double,
+        averagePace: Double,
+        route: [CLLocation] = []
+    ) async throws {
+        // Complete the session first
+        try await completeSession(
+            sessionId: sessionId,
+            totalDistance: totalDistance,
+            totalCalories: totalCalories,
+            averagePace: averagePace
+        )
+        
+        // Save to HealthKit if authorized
+        if healthKitManager.isAuthorized {
+            do {
+                guard let sessionData = try await getSessionExportData(id: sessionId) else {
+                    logger.error("Could not get session data for HealthKit save")
+                    return
+                }
+                
+                try await healthKitManager.saveWorkout(from: sessionData, route: route)
+                logger.info("Session saved to HealthKit successfully")
+                
+            } catch {
+                logger.error("Failed to save session to HealthKit: \(error.localizedDescription)")
+                // Don't throw - session is still completed locally
+            }
+        } else {
+            logger.info("HealthKit not authorized - session saved locally only")
+        }
+    }
+    
+    /// Start workout session in HealthKit
+    func startHealthKitWorkoutSession() async throws {
+        try await healthKitManager.startWorkoutSession()
+        logger.info("HealthKit workout session started")
+    }
+    
+    /// End workout session in HealthKit
+    func endHealthKitWorkoutSession() async {
+        await healthKitManager.endWorkoutSession()
+        logger.info("HealthKit workout session ended")
+    }
+    
+    /// Add location to active HealthKit workout
+    func addLocationToHealthKitWorkout(_ location: CLLocation) async {
+        await healthKitManager.addLocationToWorkout(location)
     }
 }
 
