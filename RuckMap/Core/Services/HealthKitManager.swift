@@ -7,7 +7,7 @@ import Observation
 /// Manages all HealthKit operations for RuckMap including permissions, data reading, and workout saving
 @Observable
 @MainActor
-final class HealthKitManager: Sendable {
+final class HealthKitManager {
     private let logger = Logger(subsystem: "com.ruckmap.app", category: "HealthKitManager")
     private let healthStore = HKHealthStore()
     
@@ -45,7 +45,9 @@ final class HealthKitManager: Sendable {
     
     // Workout session tracking
     private var activeWorkoutSession: HKWorkoutSession?
+    #if os(watchOS)
     private var workoutBuilder: HKLiveWorkoutBuilder?
+    #endif
     private var workoutRouteBuilder: HKWorkoutRouteBuilder?
     
     // Callbacks for real-time data
@@ -313,16 +315,15 @@ final class HealthKitManager: Sendable {
                     return
                 }
                 
-                // Rate limiting - prevent UI flooding
-                if let lastUpdate = self?.lastHeartRateUpdateTime,
-                   Date().timeIntervalSince(lastUpdate) < (self?.heartRateUpdateInterval ?? 1.0) {
-                    return
-                }
-                
-                self?.lastHeartRateUpdateTime = Date()
-                self?.logger.debug("Received heart rate update: \(heartRate) bpm")
-                
                 Task { @MainActor in
+                    // Rate limiting - prevent UI flooding
+                    if let lastUpdate = self?.lastHeartRateUpdateTime,
+                       Date().timeIntervalSince(lastUpdate) < (self?.heartRateUpdateInterval ?? 1.0) {
+                        return
+                    }
+                    
+                    self?.lastHeartRateUpdateTime = Date()
+                    self?.logger.debug("Received heart rate update: \(heartRate) bpm")
                     self?.onHeartRateUpdate?(heartRate)
                 }
             }
@@ -346,16 +347,15 @@ final class HealthKitManager: Sendable {
                     continue
                 }
                 
-                // Rate limiting - prevent UI flooding
-                if let lastUpdate = self?.lastHeartRateUpdateTime,
-                   Date().timeIntervalSince(lastUpdate) < (self?.heartRateUpdateInterval ?? 1.0) {
-                    continue
-                }
-                
-                self?.lastHeartRateUpdateTime = Date()
-                self?.logger.debug("Real-time heart rate update: \(heartRate) bpm")
-                
                 Task { @MainActor in
+                    // Rate limiting - prevent UI flooding
+                    if let lastUpdate = self?.lastHeartRateUpdateTime,
+                       Date().timeIntervalSince(lastUpdate) < (self?.heartRateUpdateInterval ?? 1.0) {
+                        return
+                    }
+                    
+                    self?.lastHeartRateUpdateTime = Date()
+                    self?.logger.debug("Real-time heart rate update: \(heartRate) bpm")
                     self?.onHeartRateUpdate?(heartRate)
                 }
                 break // Only use most recent valid reading
@@ -443,19 +443,23 @@ final class HealthKitManager: Sendable {
             // Create workout session
             activeWorkoutSession = try HKWorkoutSession(healthStore: healthStore, configuration: configuration)
             
-            // Create workout builder
+            #if os(watchOS)
+            // Create workout builder (only available on watchOS)
             workoutBuilder = activeWorkoutSession?.associatedWorkoutBuilder()
             workoutBuilder?.dataSource = HKLiveWorkoutDataSource(
                 healthStore: healthStore,
                 workoutConfiguration: configuration
             )
+            #endif
             
             // Create route builder for GPS tracking
             workoutRouteBuilder = HKWorkoutRouteBuilder(healthStore: healthStore, device: nil)
             
             // Start the session
             activeWorkoutSession?.startActivity(with: Date())
+            #if os(watchOS)
             try await workoutBuilder?.beginCollection(at: Date())
+            #endif
             
             logger.info("Workout session started successfully")
             
@@ -684,18 +688,10 @@ final class HealthKitManager: Sendable {
     // MARK: - Cleanup
     
     deinit {
-        // Synchronous cleanup only
-        if let query = currentHeartRateQuery {
-            healthStore.stop(query)
-        }
-        
-        if let observer = heartRateObserver {
-            healthStore.stop(observer)
-        }
-        
-        // Note: Background delivery cannot be disabled synchronously
-        // It will be re-enabled on next app launch if needed
-        logger.info("HealthKitManager deinitialized")
+        // Note: Cannot access @MainActor properties from deinit
+        // Queries and observers are automatically stopped when deallocated
+        // Background delivery will be cleaned up on next app launch if needed
+        print("HealthKitManager deinitialized")
     }
 }
 
