@@ -200,13 +200,9 @@ class OptimizedChartData<T: ChartDataPoint & Equatable & Sendable>: ObservableOb
     isOptimizing = true
     
     // Perform optimization on background thread
-    let optimizedData = await withTaskGroup(of: [T].self) { group in
-      group.addTask {
-        return self.optimizeData(newData)
-      }
-      
-      return await group.first(where: { _ in true }) ?? newData
-    }
+    let optimizedData = await Task.detached {
+      return self.optimizeData(newData)
+    }.value
     
     displayData = optimizedData
     isOptimizing = false
