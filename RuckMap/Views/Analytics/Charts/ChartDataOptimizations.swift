@@ -202,7 +202,7 @@ class OptimizedChartData<T: ChartDataPoint & Equatable & Sendable>: ObservableOb
     // Perform optimization on background thread
     let strategy = optimizationStrategy
     let maxPoints = maxDisplayPoints
-    let optimizedData = await Task.detached {
+    let optimizedData = await Task.detached { @Sendable in
       return Self.optimizeData(newData, strategy: strategy, maxPoints: maxPoints)
     }.value
     
